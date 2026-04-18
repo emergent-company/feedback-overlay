@@ -27,7 +27,7 @@ COPY client/ ./
 RUN npm run build
 
 # ── Stage 2: build Go server ───────────────────────────────────────────────────
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.24.2-alpine AS go-builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 

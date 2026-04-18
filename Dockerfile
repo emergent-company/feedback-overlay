@@ -34,6 +34,8 @@ RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /src
 
 ENV GONOSUMDB=github.com/emergent-company/*
+# Allow the 1.24 toolchain to satisfy modules that declare a higher go version.
+ENV GOTOOLCHAIN=auto
 
 COPY go.mod go.sum ./
 RUN go mod download

@@ -1,0 +1,193 @@
+name: Deploy feedback-overlay
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag to deploy (e.g. v1.0.0 or sha-<hash>). Leave blank to build and deploy HEAD."
+        required: false
+        default: ""
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build and push the image to GHCR
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.ver.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve VERSION
+        id: ver
+        run: |
+          VERSION=$(cat VERSION 2>/dev/null || echo "dev")
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT"   >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/feedback-overlay
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.ver.outputs.version }}
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            COMMIT=${{ steps.ver.outputs.commit }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=feedback-overlay
+          cache-to: type=gha,mode=max,scope=feedback-overlay
+
+  # ---------------------------------------------------------------------------
+  # 2. Deploy to cluster via SSH over Tailscale
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: feedback-overlay-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="${{ needs.build.outputs.image_tag }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Deploying image tag: $TAG"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --accept-dns=true
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.FEEDBACK_SERVER_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' \
+            'Host feedback-server' \
+            '  HostName 100.72.122.62' \
+            '  User root' \
+            '  IdentityFile ~/.ssh/id_deploy' \
+            '  StrictHostKeyChecking accept-new' \
+            '  ConnectTimeout 15' \
+            >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          echo "--- Testing connectivity ---"
+          ssh -o BatchMode=yes feedback-server echo "cluster reachable"
+
+      - name: Deploy compose file and .env
+        run: |
+          ssh feedback-server 'mkdir -p /opt/stacks/feedback-overlay'
+          scp compose/feedback-overlay/docker-compose.yml \
+            feedback-server:/opt/stacks/feedback-overlay/docker-compose.yml
+
+          printf '%s\n' \
+            "VERSION=${{ steps.tag.outputs.tag }}" \
+            "PORT=8080" \
+            "DB_PATH=/data/feedback-overlay.db" \
+            "GITHUB_CLIENT_ID=${{ secrets.FEEDBACK_GITHUB_CLIENT_ID }}" \
+            "GITHUB_CLIENT_SECRET=${{ secrets.FEEDBACK_GITHUB_CLIENT_SECRET }}" \
+            "GITHUB_REDIRECT_URI=https://feedback.emergent-company.ai/auth/callback" \
+            "JWT_SECRET=${{ secrets.FEEDBACK_JWT_SECRET }}" \
+            "ALLOWED_ORIGINS=${{ secrets.FEEDBACK_ALLOWED_ORIGINS }}" \
+            | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
+
+      - name: Pull and restart
+        run: |
+          ssh feedback-server "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin"
+          ssh feedback-server "cd /opt/stacks/feedback-overlay && docker compose pull feedback-overlay"
+          ssh feedback-server "cd /opt/stacks/feedback-overlay && docker compose up -d --no-deps feedback-overlay"
+
+      - name: Wait for health check
+        id: health
+        run: |
+          TIMEOUT=120
+          INTERVAL=5
+          ELAPSED=0
+          echo "Polling https://feedback.emergent-company.ai/health for up to ${TIMEOUT}s..."
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            RESPONSE=$(wget -qO- --timeout=5 https://feedback.emergent-company.ai/health 2>&1 || echo FAIL)
+            echo "  [${ELAPSED}s] $RESPONSE"
+            if echo "$RESPONSE" | grep -q '"ok"'; then
+              echo "Health check passed after ${ELAPSED}s"
+              exit 0
+            fi
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          echo "::error::Health check timed out after ${TIMEOUT}s"
+          echo "rollback=true" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Rollback to previous image
+        if: failure() && steps.health.outputs.rollback == 'true'
+        run: |
+          echo "Rolling back — restarting with previous image..."
+          ssh feedback-server "cd /opt/stacks/feedback-overlay && docker compose restart feedback-overlay"
+          echo "::warning::Rollback complete. Investigate the failed deployment."
+
+      - name: Write deployment summary
+        if: always()
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## feedback-overlay Deployment
+
+          | Field        | Value |
+          |--------------|-------|
+          | Version      | \`$TAG\` |
+          | Deployed at  | $TIMESTAMP |
+          | Triggered by | @${{ github.actor }} |
+          | Workflow run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Container status" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ssh feedback-server 'docker ps -a --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

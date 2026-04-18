@@ -1,0 +1,21 @@
+# Go
+bin/
+*.test
+*.out
+
+# Node
+client/node_modules/
+
+# Data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store

@@ -1,0 +1,115 @@
+version: "3"
+
+vars:
+  VERSION:
+    sh: cat VERSION 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+
+tasks:
+
+  # ── Client ──────────────────────────────────────────────────────────────────
+
+  build:client:
+    desc: "Build the JS client bundle (minified)"
+    dir: client
+    cmds:
+      - npm run build
+    sources:
+      - src/**/*.ts
+      - styles/**/*.css
+      - package.json
+    generates:
+      - ../server/static/feedback-overlay.js
+
+  build:client:dev:
+    desc: "Build the JS client bundle (development, with source maps)"
+    dir: client
+    cmds:
+      - npm run build:dev
+
+  watch:client:
+    desc: "Watch and rebuild the JS client on changes"
+    dir: client
+    cmds:
+      - npm run watch
+
+  # ── Server ──────────────────────────────────────────────────────────────────
+
+  build:server:
+    desc: "Build the Go server binary"
+    cmds:
+      - |
+        CGO_ENABLED=0 go build \
+          -ldflags="-s -w -X main.Version={{.VERSION}} -X main.Commit={{.COMMIT}}" \
+          -o bin/feedback-overlay-server \
+          ./server
+    sources:
+      - server/**/*.go
+      - server/static/feedback-overlay.js
+      - go.mod
+      - go.sum
+    generates:
+      - bin/feedback-overlay-server
+
+  # ── Combined ─────────────────────────────────────────────────────────────────
+
+  build:
+    desc: "Build both JS client and Go server"
+    cmds:
+      - task: build:client
+      - task: build:server
+
+  # ── Development ──────────────────────────────────────────────────────────────
+
+  dev:
+    desc: "Run the server locally (requires env vars to be set)"
+    deps: [build:client:dev]
+    cmds:
+      - go run ./server
+
+  # ── Docker ───────────────────────────────────────────────────────────────────
+
+  docker:build:
+    desc: "Build the Docker image locally"
+    cmds:
+      - |
+        docker build \
+          --build-arg VERSION={{.VERSION}} \
+          --build-arg COMMIT={{.COMMIT}} \
+          -t ghcr.io/emergent-company/feedback-overlay:{{.VERSION}} \
+          -t ghcr.io/emergent-company/feedback-overlay:latest \
+          .
+
+  docker:run:
+    desc: "Run the Docker image locally (requires .env file)"
+    cmds:
+      - |
+        docker run --rm -p 8080:8080 \
+          --env-file .env \
+          -v $(pwd)/data:/data \
+          ghcr.io/emergent-company/feedback-overlay:latest
+
+  # ── Testing ───────────────────────────────────────────────────────────────────
+
+  test:
+    desc: "Run Go tests"
+    cmds:
+      - go test ./...
+
+  test:verbose:
+    desc: "Run Go tests with verbose output"
+    cmds:
+      - go test -v ./...
+
+  # ── Utilities ─────────────────────────────────────────────────────────────────
+
+  tidy:
+    desc: "Tidy Go modules"
+    cmds:
+      - go mod tidy
+
+  lint:
+    desc: "Run golangci-lint (must be installed)"
+    cmds:
+      - golangci-lint run ./...

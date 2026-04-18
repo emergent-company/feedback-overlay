@@ -1,0 +1,36 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # feedback-overlay — element-level feedback tool with GitHub issue export
+  #
+  # Exposes:
+  #   /feedback-overlay.js   — embeddable JS bundle (public)
+  #   /auth/github           — OAuth initiation
+  #   /auth/callback         — OAuth callback
+  #   /feedback              — CRUD API
+  #   /issue/export          — GitHub issue creation
+  #   /health                — health check
+  #
+  # Persistent state lives in a named volume mounted at /data.
+  # ---------------------------------------------------------------------------
+  feedback-overlay:
+    image: ghcr.io/emergent-company/feedback-overlay:${VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "3014:8080"
+    volumes:
+      - feedback-data:/data
+    env_file:
+      - .env
+    # Route public hostnames to Traefik (internal reverse proxy at 10.10.10.20).
+    extra_hosts:
+      - "feedback.emergent-company.ai:10.10.10.20"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  feedback-data:

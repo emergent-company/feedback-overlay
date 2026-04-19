@@ -22,7 +22,9 @@ FROM node:22-alpine AS node-builder
 
 WORKDIR /client
 COPY client/package*.json ./
-RUN npm ci --prefer-offline
+# Cache npm packages across builds — only invalidated when package-lock.json changes.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline
 COPY client/ ./
 RUN npm run build
 
@@ -37,18 +39,24 @@ ENV GONOSUMDB=github.com/emergent-company/*
 # Allow the 1.24 toolchain to satisfy modules that declare a higher go version.
 ENV GOTOOLCHAIN=auto
 
+# Download modules first — cached until go.mod/go.sum change.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    go mod download
 
+# Copy source. The JS bundle in server/static/ is a placeholder in the repo;
+# we overwrite it from the node-builder stage below.
 COPY . .
-
-# Overwrite the placeholder with the real built JS bundle.
 COPY --from=node-builder /client/../server/static/feedback-overlay.js ./server/static/feedback-overlay.js
 
+# VERSION/COMMIT are injected here. Changing them only busts the final link
+# step, not the expensive compilation of all dependencies.
 ARG VERSION=dev
 ARG COMMIT=unknown
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
       -ldflags="-s -w \
         -X main.Version=${VERSION} \
@@ -64,7 +72,7 @@ RUN apk add --no-cache ca-certificates tzdata wget
 # Non-root user
 RUN addgroup -S feedback && adduser -S feedback -G feedback
 
-COPY --from=go-builder /out/feedback-overlay-server /usr/local/bin/feedback-overlay-server
+COPY --link --from=go-builder /out/feedback-overlay-server /usr/local/bin/feedback-overlay-server
 
 # Persistent data volume for SQLite database.
 # Create /data as root and give it to the feedback user before switching.

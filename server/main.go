@@ -62,9 +62,10 @@ func main() {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: origins,
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
-		AllowHeaders: []string{echo.HeaderContentType, echo.HeaderAuthorization},
+		AllowOrigins:     origins,
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization},
+		AllowCredentials: true,
 	}))
 
 	// ── Static: serve embedded feedback-overlay.js ────────────────────────────

@@ -84,6 +84,12 @@ import { buildSelector } from "./selector";
 
     forceMode("capturing");
 
+    // Stop element highlighting — we're done selecting.
+    document.body.style.cursor = "";
+    document.removeEventListener("mouseover", onMouseOver, true);
+    document.removeEventListener("click", onElementClick, true);
+    clearHighlight();
+
     // Ensure the user is authenticated before proceeding.
     if (!auth.isAuthenticated()) {
       await new Promise<void>((resolve, reject) => {
@@ -104,8 +110,7 @@ import { buildSelector } from "./selector";
 
     const user = auth.getUser()!;
 
-    // Capture screenshot.
-    clearHighlight(); // hide highlight before capture for a cleaner shot
+    // Capture screenshot (highlight already cleared above).
     const screenshot = await captureElement(target);
 
     forceMode("commenting");

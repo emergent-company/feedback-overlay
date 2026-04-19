@@ -9,6 +9,7 @@ export interface AuthUser {
 }
 
 const AUTH_MESSAGE_TYPE = "feedback_overlay_auth";
+const USER_KEY = "__fo_user__";
 
 export class AuthManager {
   private user: AuthUser | null = null;
@@ -19,8 +20,9 @@ export class AuthManager {
   constructor(config: OverlayConfig, api: APIClient) {
     this.config = config;
     this.api = api;
-    // Try to restore session from sessionStorage.
     this.api.loadToken();
+    // Restore user profile synchronously from localStorage — no round-trip needed.
+    this.user = this.loadUser();
   }
 
   getUser(): AuthUser | null {
@@ -28,21 +30,22 @@ export class AuthManager {
   }
 
   isAuthenticated(): boolean {
-    return this.api.isAuthenticated();
+    return this.api.isAuthenticated() && this.user !== null;
   }
 
   /**
-   * Restores the user from a valid stored token by calling /me.
-   * Returns true if the token is still valid.
+   * Validates the stored token against /me. Call once on startup in the
+   * background. Clears the session if the token has expired.
    */
   async tryRestoreSession(): Promise<boolean> {
     if (!this.api.isAuthenticated()) return false;
     try {
       const me = await this.api.getMe();
       this.user = { login: me.login, avatarUrl: me.avatar_url };
+      this.saveUser(this.user);
       return true;
     } catch {
-      this.api.clearToken();
+      this.clearSession();
       return false;
     }
   }
@@ -83,6 +86,7 @@ export class AuthManager {
         };
         this.api.setToken(token);
         this.user = { login, avatarUrl: avatar };
+        this.saveUser(this.user);
         resolve(this.user);
       };
 
@@ -110,7 +114,30 @@ export class AuthManager {
   }
 
   logout(): void {
+    this.clearSession();
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  private saveUser(user: AuthUser): void {
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch { /* storage unavailable */ }
+  }
+
+  private loadUser(): AuthUser | null {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as AuthUser;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearSession(): void {
     this.user = null;
     this.api.clearToken();
+    try { localStorage.removeItem(USER_KEY); } catch { /* ignore */ }
   }
 }

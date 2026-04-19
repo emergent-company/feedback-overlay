@@ -54,9 +54,10 @@ function handleKeyUp(e: KeyboardEvent): void {
   if (e.key === ALT) altDown = false;
   if (e.key === SHIFT) shiftDown = false;
 
-  // Deactivate when both keys released, regardless of current mode.
-  // This ensures the user is never stuck if a dialog is dismissed externally.
-  if (!altDown && !shiftDown && mode !== "idle") {
+  // Only deactivate while in element-selection mode ("active").
+  // Once the user has clicked an element the mode advances to "capturing" or
+  // "commenting" and the dialog must stay open regardless of key state.
+  if (!altDown && !shiftDown && mode === "active") {
     setMode("idle");
   }
 }
@@ -64,5 +65,6 @@ function handleKeyUp(e: KeyboardEvent): void {
 function reset(): void {
   altDown = false;
   shiftDown = false;
-  if (mode !== "idle") setMode("idle");
+  // Only reset if the user hasn't already committed to a selection.
+  if (mode === "active") setMode("idle");
 }

@@ -66,24 +66,6 @@ function injectStyles(): void {
       overflow-y: auto;
       min-width: 0;
     }
-    #__fo_dialog__ .fo-screenshot-col {
-      width: 220px;
-      flex-shrink: 0;
-      border-left: 1px solid #e8e8e8;
-      background: #f7f7f7;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 16px 12px;
-      overflow: hidden;
-    }
-    #__fo_dialog__ .fo-screenshot-col img {
-      width: 100%;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-      object-fit: contain;
-      max-height: 300px;
-    }
     #__fo_dialog__ .fo-user-bar {
       display: flex;
       align-items: center;
@@ -150,14 +132,6 @@ function injectStyles(): void {
       font-size: 12px;
       font-weight: 500;
     }
-    #__fo_dialog__ .fo-screenshot-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: #666;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
     #__fo_dialog__ .fo-comment-list {
       list-style: none;
       padding: 0;
@@ -220,7 +194,6 @@ function getOrCreateDialog(): HTMLElement {
 
 export interface SubmitFeedbackOptions {
   selector: string;
-  screenshotDataURL: string | null;
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
   onSubmit: (comment: string) => Promise<void>;
@@ -232,15 +205,13 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   injectStyles();
   const dialog = getOrCreateDialog();
 
-  const hasScreenshot = !!opts.screenshotDataURL;
-
   dialog.innerHTML = `
     <div class="fo-card">
       <div class="fo-header">
         <h2>Submit Feedback</h2>
         <div class="fo-meta">${escapeHtml(opts.selector)}</div>
       </div>
-      <div class="fo-body${hasScreenshot ? "" : " fo-no-screenshot"}">
+      <div class="fo-body fo-no-screenshot">
         <div class="fo-form-col">
           <div class="fo-user-bar">
             <img src="${escapeHtml(opts.user.avatarUrl)}" alt="avatar">
@@ -249,13 +220,6 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <textarea id="__fo_comment__" placeholder="Describe the issue or leave a comment…"></textarea>
           <div class="fo-error" id="__fo_err__"></div>
         </div>
-        ${hasScreenshot ? `
-        <div class="fo-screenshot-col">
-          <div>
-            <div class="fo-screenshot-label">Screenshot</div>
-            <img src="${opts.screenshotDataURL}" alt="Screenshot preview">
-          </div>
-        </div>` : ""}
       </div>
       <div class="fo-footer">
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>

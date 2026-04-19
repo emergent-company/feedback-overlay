@@ -13,7 +13,6 @@ export interface CreateFeedbackParams {
   selector: string;
   comment: string;
   context: Record<string, unknown>;
-  screenshot?: string; // base64 PNG data URL
   repo: string;
   label: string;
 }

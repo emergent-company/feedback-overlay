@@ -7,7 +7,6 @@ import { AuthManager } from "./auth";
 import { startActivationListener, onModeChange, forceMode, getMode } from "./activation";
 import { highlight, clearHighlight, getHighlighted, getHighlightedSelector } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
-import { captureElement } from "./screenshot";
 import { showSubmitDialog, showLoginDialog, closeDialog } from "./dialog";
 import { buildSelector } from "./selector";
 
@@ -110,14 +109,10 @@ import { buildSelector } from "./selector";
 
     const user = auth.getUser()!;
 
-    // Capture screenshot (highlight already cleared above).
-    const screenshot = await captureElement(target);
-
     forceMode("commenting");
 
     showSubmitDialog({
       selector,
-      screenshotDataURL: screenshot?.dataURL ?? null,
       context,
       user,
       onSubmit: async (comment) => {
@@ -126,7 +121,6 @@ import { buildSelector } from "./selector";
           selector,
           comment,
           context,
-          screenshot: screenshot?.dataURL,
           repo: config.repo,
           label: config.label,
         });

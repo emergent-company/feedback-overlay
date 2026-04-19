@@ -207,7 +207,7 @@ export interface SubmitFeedbackOptions {
   existingComments: FeedbackComment[];
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
-  onSubmit: (comment: string) => Promise<void>;
+  onSubmit: (comment: string) => Promise<number>; // returns new feedback ID
   onExport: (ids: number[]) => Promise<void>;
   onCancel: () => void;
 }
@@ -252,7 +252,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
-        ${existing.length > 0 ? `<button class="fo-btn-export" id="__fo_export__">Send to GitHub</button>` : ""}
+        <button class="fo-btn-export" id="__fo_export__">Send to GitHub</button>
         <div class="fo-footer-spacer"></div>
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>
         <button class="fo-btn-primary" id="__fo_submit__">Submit</button>
@@ -263,7 +263,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const textarea = dialog.querySelector<HTMLTextAreaElement>("#__fo_comment__")!;
   const submitBtn = dialog.querySelector<HTMLButtonElement>("#__fo_submit__")!;
   const cancelBtn = dialog.querySelector<HTMLButtonElement>("#__fo_cancel__")!;
-  const exportBtn = dialog.querySelector<HTMLButtonElement>("#__fo_export__");
+  const exportBtn = dialog.querySelector<HTMLButtonElement>("#__fo_export__")!;
   const errDiv = dialog.querySelector<HTMLElement>("#__fo_err__")!;
 
   textarea.focus();
@@ -289,17 +289,33 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     }
   });
 
-  exportBtn?.addEventListener("click", async () => {
+  exportBtn.addEventListener("click", async () => {
     exportBtn.disabled = true;
     exportBtn.textContent = "Exporting…";
+    submitBtn.disabled = true;
     errDiv.textContent = "";
     try {
-      await opts.onExport(existingIds);
+      const comment = textarea.value.trim();
+      let ids = [...existingIds];
+      if (comment) {
+        // Submit the new comment first, then include its ID in the export.
+        const newId = await opts.onSubmit(comment);
+        ids = [...ids, newId];
+      }
+      if (ids.length === 0) {
+        errDiv.textContent = "Nothing to export — add a comment first.";
+        exportBtn.disabled = false;
+        exportBtn.textContent = "Send to GitHub";
+        submitBtn.disabled = false;
+        return;
+      }
+      await opts.onExport(ids);
       closeDialog();
     } catch (err) {
       errDiv.textContent = String(err);
       exportBtn.disabled = false;
       exportBtn.textContent = "Send to GitHub";
+      submitBtn.disabled = false;
     }
   });
 

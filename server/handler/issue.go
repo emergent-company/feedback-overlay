@@ -11,6 +11,7 @@ import (
 	"github.com/emergent-company/feedback-overlay/server/middleware"
 	"github.com/emergent-company/feedback-overlay/server/store"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/net/html"
 )
 
 // exportIssueRequest is the JSON body for POST /issue/export.
@@ -128,14 +129,59 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	// Element info — written once, not per comment.
 	sb.WriteString(fmt.Sprintf("**Selector:** `%s`\n\n", first.Selector))
 
+	// Element position & size (visible, not folded).
+	if br, ok := ctx["boundingRect"].(map[string]any); ok {
+		top, _ := br["top"].(float64)
+		left, _ := br["left"].(float64)
+		w, _ := br["width"].(float64)
+		h, _ := br["height"].(float64)
+		sb.WriteString(fmt.Sprintf("**Position:** top %.0f, left %.0f — **Size:** %.0f × %.0f px  \n\n", top, left, w, h))
+	}
+
+	// CSS framework detection (visible, not folded).
+	if frameworks, ok := ctx["cssFramework"].([]any); ok && len(frameworks) > 0 {
+		names := make([]string, 0, len(frameworks))
+		for _, f := range frameworks {
+			if s, ok := f.(string); ok {
+				names = append(names, s)
+			}
+		}
+		if len(names) > 0 {
+			sb.WriteString(fmt.Sprintf("**CSS framework:** %s  \n\n", strings.Join(names, ", ")))
+		}
+	}
+
+	// Key computed styles (visible, not folded).
+	if styles, ok := ctx["computedStyles"].(map[string]any); ok && len(styles) > 0 {
+		sb.WriteString("<details><summary>Computed styles</summary>\n\n```\n")
+		// Stable key order: layout first, then visual.
+		order := []string{
+			"display", "position", "flexDirection", "flexWrap", "alignItems", "justifyContent",
+			"gridTemplateColumns", "gridTemplateRows",
+			"width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
+			"margin", "padding",
+			"color", "backgroundColor", "opacity",
+			"fontSize", "fontFamily", "fontWeight", "lineHeight", "textAlign",
+			"border", "borderRadius", "boxShadow",
+			"overflow", "overflowX", "overflowY",
+			"zIndex", "visibility", "cursor",
+		}
+		for _, k := range order {
+			if v, ok := styles[k].(string); ok {
+				sb.WriteString(fmt.Sprintf("%-24s %s\n", k+":", v))
+			}
+		}
+		sb.WriteString("```\n\n</details>\n\n")
+	}
+
 	// Foldable: element HTML + full context JSON (from first item, shown once).
 	outerHTML, _ := ctx["outerHTML"].(string)
 	prettyCtx := prettyJSON(first.ContextJSON)
 
-	sb.WriteString("<details><summary>Element details</summary>\n\n")
+	sb.WriteString("<details><summary>Element HTML &amp; full context</summary>\n\n")
 	if outerHTML != "" {
 		sb.WriteString("**HTML**\n\n```html\n")
-		sb.WriteString(outerHTML)
+		sb.WriteString(prettyHTML(outerHTML))
 		sb.WriteString("\n```\n\n")
 	}
 	sb.WriteString("**Context**\n\n```json\n")
@@ -178,4 +224,80 @@ func prettyJSON(raw string) string {
 		return raw
 	}
 	return buf.String()
+}
+
+// voidElements are HTML elements that have no closing tag.
+var voidElements = map[string]bool{
+	"area": true, "base": true, "br": true, "col": true, "embed": true,
+	"hr": true, "img": true, "input": true, "link": true, "meta": true,
+	"param": true, "source": true, "track": true, "wbr": true,
+}
+
+// prettyHTML indents an HTML fragment using the x/net tokenizer.
+// Falls back to the raw string on any parse error.
+func prettyHTML(raw string) string {
+	z := html.NewTokenizer(strings.NewReader(raw))
+	var buf strings.Builder
+	depth := 0
+	const tab = "  "
+
+	writeIndent := func() {
+		for i := 0; i < depth; i++ {
+			buf.WriteString(tab)
+		}
+	}
+
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			// EOF or parse error — return what we have (or raw on empty).
+			result := strings.TrimRight(buf.String(), "\n")
+			if result == "" {
+				return raw
+			}
+			return result
+
+		case html.StartTagToken:
+			tok := z.Token()
+			writeIndent()
+			buf.WriteString(tok.String())
+			buf.WriteByte('\n')
+			if !voidElements[tok.Data] {
+				depth++
+			}
+
+		case html.EndTagToken:
+			tok := z.Token()
+			if !voidElements[tok.Data] {
+				depth--
+				if depth < 0 {
+					depth = 0
+				}
+			}
+			writeIndent()
+			buf.WriteString(tok.String())
+			buf.WriteByte('\n')
+
+		case html.SelfClosingTagToken:
+			tok := z.Token()
+			writeIndent()
+			buf.WriteString(tok.String())
+			buf.WriteByte('\n')
+
+		case html.TextToken:
+			text := strings.TrimSpace(string(z.Text()))
+			if text == "" {
+				continue
+			}
+			writeIndent()
+			buf.WriteString(text)
+			buf.WriteByte('\n')
+
+		case html.CommentToken:
+			writeIndent()
+			buf.WriteString(z.Token().String())
+			buf.WriteByte('\n')
+		}
+	}
 }

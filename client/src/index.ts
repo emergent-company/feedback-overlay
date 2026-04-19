@@ -99,7 +99,7 @@ import { buildSelector } from "./selector";
       context,
       user,
       onSubmit: async (comment) => {
-        await api.createFeedback({
+        const result = await api.createFeedback({
           url: window.location.href,
           selector,
           comment,
@@ -111,6 +111,7 @@ import { buildSelector } from "./selector";
         const summaries = await api.listBadges(window.location.href).catch(() => []);
         renderBadges(summaries, onBadgeClick);
         forceMode("active");
+        return result.id;
       },
       onExport: async (ids) => {
         const result = await api.exportIssue({
@@ -168,6 +169,8 @@ import { buildSelector } from "./selector";
       outerHTML: el.outerHTML?.slice(0, 4000) ?? "",
       innerText: (el as HTMLElement).innerText?.slice(0, 200) ?? "",
       attributes: gatherAttributes(el),
+      cssFramework: detectCSSFramework(el),
+      computedStyles: gatherComputedStyles(el),
       boundingRect: {
         top: Math.round(rect.top),
         left: Math.round(rect.left),
@@ -185,5 +188,79 @@ import { buildSelector } from "./selector";
       if (attr.value.length < 200) out[attr.name] = attr.value;
     }
     return out;
+  }
+
+  // Key computed style properties worth reporting.
+  const COMPUTED_STYLE_PROPS = [
+    "display", "position", "flexDirection", "flexWrap", "alignItems", "justifyContent",
+    "gridTemplateColumns", "gridTemplateRows",
+    "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
+    "margin", "padding",
+    "color", "backgroundColor", "opacity",
+    "fontSize", "fontFamily", "fontWeight", "lineHeight", "textAlign",
+    "border", "borderRadius", "boxShadow",
+    "overflow", "overflowX", "overflowY",
+    "zIndex", "visibility", "cursor",
+  ] as const;
+
+  function gatherComputedStyles(el: Element): Record<string, string> {
+    const cs = window.getComputedStyle(el);
+    const out: Record<string, string> = {};
+    for (const prop of COMPUTED_STYLE_PROPS) {
+      const val = cs.getPropertyValue(
+        // Convert camelCase to kebab-case for getPropertyValue.
+        prop.replace(/([A-Z])/g, (c) => `-${c.toLowerCase()}`)
+      ).trim();
+      // Skip browser defaults that add noise.
+      if (val && val !== "none" && val !== "normal" && val !== "auto" && val !== "0px") {
+        out[prop] = val;
+      }
+    }
+    return out;
+  }
+
+  // Detect CSS framework from class names and other signals.
+  function detectCSSFramework(el: Element): string[] {
+    const classes = Array.from(el.classList).join(" ");
+    // Gather classes from all ancestors too for broader signal.
+    let node: Element | null = el;
+    const allClasses: string[] = [];
+    for (let i = 0; i < 6 && node; i++) {
+      allClasses.push(...Array.from(node.classList));
+      node = node.parentElement;
+    }
+    const joined = allClasses.join(" ");
+
+    const detected: string[] = [];
+
+    // Tailwind: utility class patterns.
+    if (/\b(bg-|text-|flex|grid|p-|m-|w-|h-|rounded|border|shadow|gap-|items-|justify-|font-|leading-|tracking-)/.test(joined))
+      detected.push("Tailwind CSS");
+
+    // DaisyUI: component class names.
+    if (/\b(btn|badge|card|modal|navbar|drawer|dropdown|alert|toast|menu|tab|hero|footer|input|select|checkbox|toggle|range|avatar|indicator)\b/.test(classes))
+      detected.push("DaisyUI");
+
+    // Bootstrap.
+    if (/\b(container|row|col-|btn-|navbar-|card-|modal-|form-control|d-flex|align-items-|justify-content-)/.test(joined))
+      detected.push("Bootstrap");
+
+    // Material UI.
+    if (/\bMui[A-Z]/.test(joined))
+      detected.push("Material UI");
+
+    // Chakra UI.
+    if (/\bchakra-/.test(joined))
+      detected.push("Chakra UI");
+
+    // Radix UI.
+    if (el.hasAttribute("data-radix-collection-item") || /\bradix-/.test(joined))
+      detected.push("Radix UI");
+
+    // Shadcn (Tailwind + Radix combo signal via cn() pattern classes).
+    if (detected.includes("Tailwind CSS") && detected.includes("Radix UI"))
+      detected.push("shadcn/ui");
+
+    return detected;
   }
 })();

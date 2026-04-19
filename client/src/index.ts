@@ -161,7 +161,11 @@ import { buildSelector } from "./selector";
   function gatherContext(el: Element): Record<string, unknown> {
     const rect = el.getBoundingClientRect();
     return {
+      url: window.location.href,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      devicePixelRatio: window.devicePixelRatio,
       tagName: el.tagName.toLowerCase(),
+      outerHTML: el.outerHTML?.slice(0, 4000) ?? "",
       innerText: (el as HTMLElement).innerText?.slice(0, 200) ?? "",
       attributes: gatherAttributes(el),
       boundingRect: {
@@ -170,10 +174,7 @@ import { buildSelector } from "./selector";
         width: Math.round(rect.width),
         height: Math.round(rect.height),
       },
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      devicePixelRatio: window.devicePixelRatio,
       userAgent: navigator.userAgent,
-      url: window.location.href,
       timestamp: new Date().toISOString(),
     };
   }

@@ -1,7 +1,8 @@
 package handler
 
 import (
-	"encoding/base64"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -74,43 +75,107 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 }
 
 // buildIssueContent formats the GitHub issue title and Markdown body.
-func buildIssueContent(items []store.Feedback, reporter string) (title, body string) {
+func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	if len(items) == 0 {
 		return "Feedback report", ""
 	}
 
-	// Use the page URL from the first item for the title.
-	pageURL := items[0].URL
-	title = fmt.Sprintf("Feedback: %s", pageURL)
+	first := items[0]
+
+	// Title: short description only — no URL.
+	if len(items) == 1 {
+		title = fmt.Sprintf("Feedback on %s", selectorShort(first.Selector))
+	} else {
+		title = fmt.Sprintf("Feedback: %d comments on %s", len(items), selectorShort(first.Selector))
+	}
+
+	// Parse context from the first item to extract page-level metadata.
+	ctx := parseContext(first.ContextJSON)
 
 	var sb strings.Builder
-	sb.WriteString("## Feedback Report\n\n")
-	sb.WriteString(fmt.Sprintf("**Page:** %s  \n", pageURL))
-	sb.WriteString(fmt.Sprintf("**Repo:** `%s`  \n", items[0].Repo))
-	sb.WriteString(fmt.Sprintf("**Reporter:** @%s  \n\n", reporter))
-	sb.WriteString("---\n\n")
+	sb.WriteString("## Feedback\n\n")
 
-	for i, f := range items {
-		sb.WriteString(fmt.Sprintf("### Item %d\n\n", i+1))
-		sb.WriteString(fmt.Sprintf("**Comment**  \n%s\n\n", f.Comment))
-		sb.WriteString(fmt.Sprintf("**Element**  \n- Selector: `%s`\n\n", f.Selector))
+	// Page-level metadata (from first item's context).
+	pageURL := first.URL
+	if u, ok := ctx["url"].(string); ok && u != "" {
+		pageURL = u
+	}
+	sb.WriteString(fmt.Sprintf("**URL:** %s  \n", pageURL))
 
-		if f.ContextJSON != "" && f.ContextJSON != "{}" {
-			sb.WriteString("<details><summary>Context</summary>\n\n```json\n")
-			sb.WriteString(f.ContextJSON)
-			sb.WriteString("\n```\n</details>\n\n")
-		}
-
-		if len(f.Screenshot) > 0 {
-			b64 := base64.StdEncoding.EncodeToString(f.Screenshot)
-			sb.WriteString(fmt.Sprintf("**Screenshot**  \n![screenshot](data:image/png;base64,%s)\n\n", b64))
-		}
-
-		sb.WriteString(fmt.Sprintf("*Submitted: %s*\n\n", f.CreatedAt.Format("2006-01-02 15:04 UTC")))
-		if i < len(items)-1 {
-			sb.WriteString("---\n\n")
+	if vp, ok := ctx["viewport"].(map[string]any); ok {
+		w, _ := vp["width"].(float64)
+		h, _ := vp["height"].(float64)
+		dpr, _ := ctx["devicePixelRatio"].(float64)
+		if w > 0 && h > 0 {
+			sb.WriteString(fmt.Sprintf("**Viewport:** %.0f × %.0f px", w, h))
+			if dpr > 0 && dpr != 1 {
+				sb.WriteString(fmt.Sprintf(" (%.1f× DPR)", dpr))
+			}
+			sb.WriteString("  \n")
 		}
 	}
 
+	sb.WriteString("\n---\n\n")
+
+	// One comment block per feedback item.
+	for i, f := range items {
+		sb.WriteString(fmt.Sprintf("### Comment %d\n\n", i+1))
+		sb.WriteString(fmt.Sprintf("**@%s**  \n%s\n\n", f.GitHubUser, f.Comment))
+	}
+
+	sb.WriteString("---\n\n")
+
+	// Element info — written once, not per comment.
+	sb.WriteString(fmt.Sprintf("**Selector:** `%s`\n\n", first.Selector))
+
+	// Foldable: element HTML + full context JSON (from first item, shown once).
+	outerHTML, _ := ctx["outerHTML"].(string)
+	prettyCtx := prettyJSON(first.ContextJSON)
+
+	sb.WriteString("<details><summary>Element details</summary>\n\n")
+	if outerHTML != "" {
+		sb.WriteString("**HTML**\n\n```html\n")
+		sb.WriteString(outerHTML)
+		sb.WriteString("\n```\n\n")
+	}
+	sb.WriteString("**Context**\n\n```json\n")
+	sb.WriteString(prettyCtx)
+	sb.WriteString("\n```\n\n")
+	sb.WriteString("</details>\n")
+
 	return title, sb.String()
+}
+
+// selectorShort returns the last segment of a CSS selector for use in titles.
+func selectorShort(sel string) string {
+	parts := strings.Split(sel, ">")
+	last := strings.TrimSpace(parts[len(parts)-1])
+	if len(last) > 60 {
+		return last[:57] + "…"
+	}
+	return last
+}
+
+// parseContext unmarshals a context JSON string into a map.
+func parseContext(raw string) map[string]any {
+	if raw == "" || raw == "{}" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+// prettyJSON returns a pretty-printed version of a JSON string.
+func prettyJSON(raw string) string {
+	if raw == "" {
+		return "{}"
+	}
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, []byte(raw), "", "  "); err != nil {
+		return raw
+	}
+	return buf.String()
 }

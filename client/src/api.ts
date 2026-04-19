@@ -64,10 +64,15 @@ export class APIClient {
     path: string,
     init: RequestInit = {}
   ): Promise<T> {
+    const method = (init.method ?? "GET").toUpperCase();
+    const contentTypeHeader: HeadersInit =
+      method !== "GET" && method !== "HEAD"
+        ? { "Content-Type": "application/json" }
+        : {};
     const resp = await fetch(this.base + path, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        ...contentTypeHeader,
         ...this.authHeaders(),
         ...(init.headers ?? {}),
       },

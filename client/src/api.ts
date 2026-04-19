@@ -39,16 +39,16 @@ export class APIClient {
 
   setToken(token: string): void {
     this.token = token;
-    sessionStorage.setItem("__fo_token__", token);
+    localStorage.setItem("__fo_token__", token);
   }
 
   loadToken(): void {
-    this.token = sessionStorage.getItem("__fo_token__");
+    this.token = localStorage.getItem("__fo_token__");
   }
 
   clearToken(): void {
     this.token = null;
-    sessionStorage.removeItem("__fo_token__");
+    localStorage.removeItem("__fo_token__");
   }
 
   isAuthenticated(): boolean {

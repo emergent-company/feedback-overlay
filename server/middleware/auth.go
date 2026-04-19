@@ -28,7 +28,7 @@ func IssueToken(secret, login, avatarURL, ghToken string) (string, error) {
 		GitHubToken: ghToken,
 		AvatarURL:   avatarURL,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

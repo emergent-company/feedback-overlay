@@ -109,7 +109,7 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' \
             'Host feedback-server' \
-            '  HostName 100.72.122.62' \
+            '  HostName 100.112.108.106' \
             '  User root' \
             '  IdentityFile ~/.ssh/id_deploy' \
             '  StrictHostKeyChecking accept-new' \

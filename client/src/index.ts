@@ -19,8 +19,9 @@ import { buildSelector } from "./selector";
   const api = new APIClient(config);
   const auth = new AuthManager(config, api);
 
-  // Try to restore existing session silently.
-  auth.tryRestoreSession().catch(() => {/* silent */});
+  // If any API call returns 401 the token has expired — clear the session so
+  // the next element click will prompt for re-login instead of failing silently.
+  api.setOnUnauthorized(() => auth.logout());
 
   startActivationListener();
 

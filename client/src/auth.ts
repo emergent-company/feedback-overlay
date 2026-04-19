@@ -34,23 +34,6 @@ export class AuthManager {
   }
 
   /**
-   * Validates the stored token against /me. Call once on startup in the
-   * background. Clears the session if the token has expired.
-   */
-  async tryRestoreSession(): Promise<boolean> {
-    if (!this.api.isAuthenticated()) return false;
-    try {
-      const me = await this.api.getMe();
-      this.user = { login: me.login, avatarUrl: me.avatar_url };
-      this.saveUser(this.user);
-      return true;
-    } catch {
-      this.clearSession();
-      return false;
-    }
-  }
-
-  /**
    * Opens the GitHub OAuth popup. Resolves when the user completes auth
    * (via postMessage from the callback page) or rejects on timeout/cancel.
    */

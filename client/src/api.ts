@@ -31,9 +31,15 @@ export interface ExportIssueResult {
 export class APIClient {
   private base: string;
   private token: string | null = null;
+  private onUnauthorized: (() => void) | null = null;
 
   constructor(config: OverlayConfig) {
     this.base = config.apiBase;
+  }
+
+  /** Register a callback invoked when the server returns 401. */
+  setOnUnauthorized(cb: () => void): void {
+    this.onUnauthorized = cb;
   }
 
   setToken(token: string): void {
@@ -77,6 +83,9 @@ export class APIClient {
       },
     });
     if (!resp.ok) {
+      if (resp.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
       const text = await resp.text().catch(() => resp.statusText);
       throw new Error(`${resp.status}: ${text}`);
     }
@@ -114,8 +123,5 @@ export class APIClient {
     });
   }
 
-  /** Returns the authenticated user profile. */
-  async getMe(): Promise<{ login: string; avatar_url: string }> {
-    return this.fetchJSON("/me");
-  }
+
 }

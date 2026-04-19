@@ -2,6 +2,14 @@
 
 import type { OverlayConfig } from "./config";
 
+export interface FeedbackComment {
+  id: number;
+  selector: string;
+  comment: string;
+  github_user: string;
+  created_at: string;
+}
+
 export interface BadgeSummary {
   selector: string;
   count: number;
@@ -96,6 +104,13 @@ export class APIClient {
   async listBadges(url: string): Promise<BadgeSummary[]> {
     return this.fetchJSON<BadgeSummary[]>(
       `/feedback?url=${encodeURIComponent(url)}`
+    );
+  }
+
+  /** Returns full comment details for all open items on a page. */
+  async listComments(url: string): Promise<FeedbackComment[]> {
+    return this.fetchJSON<FeedbackComment[]>(
+      `/feedback/list?url=${encodeURIComponent(url)}`
     );
   }
 

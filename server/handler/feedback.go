@@ -104,6 +104,39 @@ func (h *Handler) HandleListFeedback(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// HandleListFeedbackByURL handles GET /feedback/list?url=<url>.
+// Returns full comment details for all open items on a page (public).
+func (h *Handler) HandleListFeedbackByURL(c echo.Context) error {
+	pageURL := c.QueryParam("url")
+	if pageURL == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "url query parameter is required")
+	}
+
+	items, err := h.Store.ListByURL(c.Request().Context(), pageURL)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list feedback")
+	}
+
+	type item struct {
+		ID         int64  `json:"id"`
+		Selector   string `json:"selector"`
+		Comment    string `json:"comment"`
+		GitHubUser string `json:"github_user"`
+		CreatedAt  string `json:"created_at"`
+	}
+	out := make([]item, 0, len(items))
+	for _, f := range items {
+		out = append(out, item{
+			ID:         f.ID,
+			Selector:   f.Selector,
+			Comment:    f.Comment,
+			GitHubUser: f.GitHubUser,
+			CreatedAt:  f.CreatedAt.Format("2006-01-02 15:04"),
+		})
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // HandleGetFeedback handles GET /feedback/:id.
 func (h *Handler) HandleGetFeedback(c echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)

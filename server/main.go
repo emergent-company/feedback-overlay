@@ -99,8 +99,9 @@ func main() {
 		})
 	})
 
-	// Feedback — GET /feedback?url= is public (for badge counts)
-	e.GET("/feedback", h.HandleListFeedback)
+	// Feedback — public read endpoints
+	e.GET("/feedback", h.HandleListFeedback)           // badge counts
+	e.GET("/feedback/list", h.HandleListFeedbackByURL) // full comment details for sidebar
 
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))

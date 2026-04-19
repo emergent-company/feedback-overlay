@@ -2,12 +2,13 @@
 // Bootstraps the entire overlay system when loaded as a <script> tag.
 
 import { readConfig } from "./config";
-import { APIClient } from "./api";
+import { APIClient, type FeedbackComment } from "./api";
 import { AuthManager } from "./auth";
 import { startActivationListener, onModeChange, forceMode, getMode } from "./activation";
-import { highlight, clearHighlight, getHighlighted, getHighlightedSelector } from "./highlighter";
+import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
 import { showSubmitDialog, showLoginDialog, closeDialog } from "./dialog";
+import { showSidebar, closeSidebar, isSidebarOpen } from "./sidebar";
 import { buildSelector } from "./selector";
 
 (function bootstrap() {
@@ -22,6 +23,9 @@ import { buildSelector } from "./selector";
   // If any API call returns 401 the token has expired — clear the session so
   // the next element click will prompt for re-login instead of failing silently.
   api.setOnUnauthorized(() => auth.logout());
+
+  // Cached comments for the current page (used to keep sidebar up to date).
+  let pageComments: FeedbackComment[] = [];
 
   startActivationListener();
 
@@ -40,10 +44,8 @@ import { buildSelector } from "./selector";
     document.addEventListener("mouseover", onMouseOver, true);
     document.addEventListener("click", onElementClick, true);
 
-    // Load and render existing badges.
-    api.listBadges(window.location.href).then((summaries) => {
-      renderBadges(summaries, onBadgeClick);
-    }).catch(() => {/* non-fatal */});
+    // Load badges + open sidebar.
+    refreshPageData();
   }
 
   function deactivateOverlay(): void {
@@ -53,13 +55,45 @@ import { buildSelector } from "./selector";
     clearHighlight();
     clearBadges();
     closeDialog();
+    closeSidebar();
+  }
+
+  async function refreshPageData(): Promise<void> {
+    try {
+      const [summaries, comments] = await Promise.all([
+        api.listBadges(window.location.href),
+        api.listComments(window.location.href),
+      ]);
+      pageComments = comments;
+      renderBadges(summaries, onBadgeClick);
+      // Open (or refresh) sidebar whenever overlay is active.
+      openSidebar();
+    } catch {/* non-fatal */}
+  }
+
+  function openSidebar(): void {
+    showSidebar({
+      comments: pageComments,
+      onExportAll: async (ids) => {
+        const result = await api.exportIssue({
+          ids,
+          repo: config.repo,
+          labels: [config.label],
+        });
+        window.open(result.issue_url, "_blank");
+        // Refresh after export (items become resolved).
+        await refreshPageData();
+      },
+      onClose: () => {
+        forceMode("idle");
+      },
+    });
   }
 
   // ── Mouse tracking ──────────────────────────────────────────────────────────
   function onMouseOver(e: MouseEvent): void {
     const target = e.target as Element;
     if (!target || target === document.body || target === document.documentElement) return;
-    // Don't highlight our own overlay elements.
     if (isOwnElement(target)) return;
     highlight(target);
   }
@@ -68,12 +102,11 @@ import { buildSelector } from "./selector";
     return el.id.startsWith("__fo_");
   }
 
-  // ── Element click ───────────────────────────────────────────────────────────
+  // ── Element click — add a comment ───────────────────────────────────────────
   async function onElementClick(e: MouseEvent): Promise<void> {
     const target = e.target as Element;
     if (!target || isOwnElement(target)) return;
 
-    // Prevent the page's own click handlers from firing.
     e.preventDefault();
     e.stopPropagation();
 
@@ -90,18 +123,12 @@ import { buildSelector } from "./selector";
     document.removeEventListener("click", onElementClick, true);
     clearHighlight();
 
-    // Ensure the user is authenticated before proceeding.
+    // Ensure authenticated.
     if (!auth.isAuthenticated()) {
       await new Promise<void>((resolve, reject) => {
         showLoginDialog({
-          onLogin: async () => {
-            await auth.login();
-            resolve();
-          },
-          onCancel: () => {
-            forceMode("idle");
-            reject(new Error("cancelled"));
-          },
+          onLogin: async () => { await auth.login(); resolve(); },
+          onCancel: () => { forceMode("idle"); reject(new Error("cancelled")); },
         });
       }).catch(() => { return; });
     }
@@ -125,69 +152,26 @@ import { buildSelector } from "./selector";
           repo: config.repo,
           label: config.label,
         });
+        closeDialog();
+        // Return to active mode and refresh sidebar + badges.
         forceMode("active");
-        // Refresh badges.
-        const summaries = await api.listBadges(window.location.href);
-        renderBadges(summaries, onBadgeClick);
+        await refreshPageData();
       },
       onCancel: () => {
-        forceMode("idle");
+        // Return to active mode (keep sidebar open).
+        forceMode("active");
+        // Re-attach listeners manually since activateOverlay won't re-run
+        // (mode is already "active" so onModeChange won't fire again).
+        document.body.style.cursor = "crosshair";
+        document.addEventListener("mouseover", onMouseOver, true);
+        document.addEventListener("click", onElementClick, true);
       },
     });
   }
 
-  // ── Badge click (show existing comments) ────────────────────────────────────
-  function onBadgeClick(ids: number[], selector: string): void {
-    // For now, open the export dialog for these items.
-    // A future enhancement could show a read-only list inline.
-    if (!auth.isAuthenticated()) {
-      showLoginDialog({
-        onLogin: async () => { await auth.login(); onBadgeClick(ids, selector); },
-        onCancel: () => {},
-      });
-      return;
-    }
-
-    const user = auth.getUser()!;
-    const DIALOG_ID = "__fo_dialog__";
-    let dialog = document.getElementById(DIALOG_ID);
-    if (!dialog) { dialog = document.createElement("div"); dialog.id = DIALOG_ID; document.body.appendChild(dialog); }
-
-    dialog.innerHTML = `
-      <div class="fo-card">
-        <h2>${ids.length} comment${ids.length !== 1 ? "s" : ""} on this element</h2>
-        <div class="fo-meta">${selector}</div>
-        <div class="fo-user-bar">
-          <img src="${user.avatarUrl}" alt="avatar">
-          <span>Signed in as <strong>${user.login}</strong></span>
-        </div>
-        <div class="fo-actions">
-          <button class="fo-btn-secondary" id="__fo_cancel__">Close</button>
-          <button class="fo-btn-primary" id="__fo_export__">Export to GitHub Issue</button>
-        </div>
-        <div class="fo-error" id="__fo_err__"></div>
-      </div>
-    `;
-
-    dialog.querySelector("#__fo_cancel__")?.addEventListener("click", () => { closeDialog(); });
-    dialog.querySelector("#__fo_export__")?.addEventListener("click", async () => {
-      const btn = dialog!.querySelector<HTMLButtonElement>("#__fo_export__")!;
-      btn.disabled = true;
-      btn.textContent = "Exporting…";
-      try {
-        const result = await api.exportIssue({ ids, repo: config.repo, labels: [config.label] });
-        window.open(result.issue_url, "_blank");
-        closeDialog();
-        // Refresh badges after export (items become resolved).
-        const summaries = await api.listBadges(window.location.href);
-        renderBadges(summaries, onBadgeClick);
-      } catch (err) {
-        const errEl = dialog!.querySelector<HTMLElement>("#__fo_err__")!;
-        errEl.textContent = String(err);
-        btn.disabled = false;
-        btn.textContent = "Export to GitHub Issue";
-      }
-    });
+  // ── Badge click — just refresh/open sidebar (already showing all comments) ──
+  function onBadgeClick(_ids: number[], _selector: string): void {
+    openSidebar();
   }
 
   // ── Context collection ──────────────────────────────────────────────────────
@@ -203,10 +187,7 @@ import { buildSelector } from "./selector";
         width: Math.round(rect.width),
         height: Math.round(rect.height),
       },
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
       devicePixelRatio: window.devicePixelRatio,
       userAgent: navigator.userAgent,
       url: window.location.href,
@@ -217,7 +198,6 @@ import { buildSelector } from "./selector";
   function gatherAttributes(el: Element): Record<string, string> {
     const out: Record<string, string> = {};
     for (const attr of Array.from(el.attributes)) {
-      // Skip large data URLs embedded in attributes.
       if (attr.value.length < 200) out[attr.name] = attr.value;
     }
     return out;

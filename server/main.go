@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
 	"github.com/emergent-company/feedback-overlay/server/handler"
@@ -56,17 +55,29 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// CORS — allow configured origins.
-	origins := strings.Split(allowedOrigins, ",")
-	for i := range origins {
-		origins[i] = strings.TrimSpace(origins[i])
-	}
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     origins,
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization},
-		AllowCredentials: true,
-	}))
+	// CORS — reflect any Origin back so the overlay works from any domain
+	// without infrastructure changes. The feedback-overlay.js is a read-only
+	// script tag; the only sensitive operations require a valid JWT, so
+	// reflecting any origin is safe.
+	_ = allowedOrigins // no longer used — keeping env var for compat
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			origin := c.Request().Header.Get("Origin")
+			if origin == "" {
+				return next(c)
+			}
+			h := c.Response().Header()
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Set("Access-Control-Allow-Credentials", "true")
+			h.Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+			h.Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+			h.Set("Vary", "Origin")
+			if c.Request().Method == http.MethodOptions {
+				return c.NoContent(http.StatusNoContent)
+			}
+			return next(c)
+		}
+	})
 
 	// ── Static: serve embedded feedback-overlay.js ────────────────────────────
 	staticFS, _ := fs.Sub(staticFiles, "static")

@@ -66,7 +66,9 @@ RUN addgroup -S feedback && adduser -S feedback -G feedback
 
 COPY --from=go-builder /out/feedback-overlay-server /usr/local/bin/feedback-overlay-server
 
-# Persistent data volume for SQLite database
+# Persistent data volume for SQLite database.
+# Create /data as root and give it to the feedback user before switching.
+RUN mkdir -p /data && chown feedback:feedback /data
 VOLUME ["/data"]
 
 EXPOSE 8080

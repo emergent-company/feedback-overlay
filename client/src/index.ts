@@ -6,7 +6,7 @@ import { AuthManager } from "./auth";
 import { startActivationListener, onModeChange, forceMode, getMode } from "./activation";
 import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
-import { showSubmitDialog, showLoginDialog, closeDialog } from "./dialog";
+import { showSubmitDialog, showLoginDialog, closeDialog, type FeedbackType } from "./dialog";
 import { buildSelector } from "./selector";
 
 (function bootstrap() {
@@ -98,7 +98,7 @@ import { buildSelector } from "./selector";
       existingComments,
       context,
       user,
-      onSubmit: async (comment) => {
+      onSubmit: async (comment, type: FeedbackType) => {
         const result = await api.createFeedback({
           url: window.location.href,
           selector,
@@ -106,6 +106,7 @@ import { buildSelector } from "./selector";
           context,
           repo: config.repo,
           label: config.label,
+          feedbackType: type,
         });
         // Refresh badges, return to active mode.
         const summaries = await api.listBadges(window.location.href).catch(() => []);
@@ -113,11 +114,11 @@ import { buildSelector } from "./selector";
         forceMode("active");
         return result.id;
       },
-      onExport: async (ids) => {
+      onExport: async (ids, type: FeedbackType) => {
         const result = await api.exportIssue({
           ids,
           repo: config.repo,
-          labels: [config.label],
+          labels: [config.label, type],
         });
         window.open(result.issue_url, "_blank");
         // Refresh badges after export.

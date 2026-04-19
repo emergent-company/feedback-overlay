@@ -23,6 +23,7 @@ export interface CreateFeedbackParams {
   context: Record<string, unknown>;
   repo: string;
   label: string;
+  feedbackType?: string;
 }
 
 export interface ExportIssueParams {

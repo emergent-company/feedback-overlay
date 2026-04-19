@@ -133,6 +133,39 @@ function injectStyles(): void {
       font-size: 12px;
     }
 
+    /* ── Type toggle ───────────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-type-toggle {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-type-toggle input[type="radio"] { display: none; }
+    #__fo_dialog__ .fo-type-toggle label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1.5px solid #ddd;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: #555;
+      background: #fff;
+      transition: all 0.1s;
+      user-select: none;
+    }
+    #__fo_dialog__ .fo-type-toggle input[value="bug"]:checked + label {
+      background: #fff0f0;
+      border-color: #d73a4a;
+      color: #d73a4a;
+    }
+    #__fo_dialog__ .fo-type-toggle input[value="enhancement"]:checked + label {
+      background: #f0fbff;
+      border-color: #0969da;
+      color: #0969da;
+    }
+
     /* ── Footer ────────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-footer {
       padding: 10px 18px;
@@ -202,13 +235,15 @@ function getOrCreateDialog(): HTMLElement {
   return el;
 }
 
+export type FeedbackType = "bug" | "enhancement";
+
 export interface SubmitFeedbackOptions {
   selector: string;
   existingComments: FeedbackComment[];
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
-  onSubmit: (comment: string) => Promise<number>; // returns new feedback ID
-  onExport: (ids: number[]) => Promise<void>;
+  onSubmit: (comment: string, type: FeedbackType) => Promise<number>; // returns new feedback ID
+  onExport: (ids: number[], type: FeedbackType) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -249,6 +284,12 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <span>${escapeHtml(opts.user.login)}</span>
         </div>
         <textarea id="__fo_comment__" placeholder="Add a comment…"></textarea>
+        <div class="fo-type-toggle">
+          <input type="radio" name="__fo_type__" id="__fo_type_bug__" value="bug">
+          <label for="__fo_type_bug__">🐛 Bug</label>
+          <input type="radio" name="__fo_type__" id="__fo_type_enh__" value="enhancement" checked>
+          <label for="__fo_type_enh__">✨ Enhancement</label>
+        </div>
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
@@ -266,6 +307,11 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const exportBtn = dialog.querySelector<HTMLButtonElement>("#__fo_export__")!;
   const errDiv = dialog.querySelector<HTMLElement>("#__fo_err__")!;
 
+  const getType = (): FeedbackType => {
+    const checked = dialog.querySelector<HTMLInputElement>("input[name='__fo_type__']:checked");
+    return (checked?.value ?? "enhancement") as FeedbackType;
+  };
+
   textarea.focus();
 
   cancelBtn.addEventListener("click", () => {
@@ -280,7 +326,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     submitBtn.textContent = "Submitting…";
     errDiv.textContent = "";
     try {
-      await opts.onSubmit(comment);
+      await opts.onSubmit(comment, getType());
       closeDialog();
     } catch (err) {
       errDiv.textContent = String(err);
@@ -296,10 +342,11 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     errDiv.textContent = "";
     try {
       const comment = textarea.value.trim();
+      const type = getType();
       let ids = [...existingIds];
       if (comment) {
         // Submit the new comment first, then include its ID in the export.
-        const newId = await opts.onSubmit(comment);
+        const newId = await opts.onSubmit(comment, type);
         ids = [...ids, newId];
       }
       if (ids.length === 0) {
@@ -309,7 +356,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         submitBtn.disabled = false;
         return;
       }
-      await opts.onExport(ids);
+      await opts.onExport(ids, type);
       closeDialog();
     } catch (err) {
       errDiv.textContent = String(err);

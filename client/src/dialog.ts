@@ -279,7 +279,7 @@ export function showLoginDialog(opts: LoginDialogOptions): void {
 
 export function closeDialog(): void {
   const dialog = document.getElementById(DIALOG_ID);
-  if (dialog) dialog.innerHTML = "";
+  if (dialog) dialog.remove();
 }
 
 function escapeHtml(s: string): string {

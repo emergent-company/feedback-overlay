@@ -93,7 +93,7 @@ import { buildSelector } from "./selector";
             resolve();
           },
           onCancel: () => {
-            forceMode("active");
+            forceMode("idle");
             reject(new Error("cancelled"));
           },
         });
@@ -131,7 +131,7 @@ import { buildSelector } from "./selector";
         renderBadges(summaries, onBadgeClick);
       },
       onCancel: () => {
-        forceMode("active");
+        forceMode("idle");
       },
     });
   }

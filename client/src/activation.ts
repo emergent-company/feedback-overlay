@@ -54,9 +54,9 @@ function handleKeyUp(e: KeyboardEvent): void {
   if (e.key === ALT) altDown = false;
   if (e.key === SHIFT) shiftDown = false;
 
-  // Only deactivate if both keys are released and we're in active state
-  // (not in the middle of capturing/commenting — those dismiss themselves).
-  if (!altDown && !shiftDown && mode === "active") {
+  // Deactivate when both keys released, regardless of current mode.
+  // This ensures the user is never stuck if a dialog is dismissed externally.
+  if (!altDown && !shiftDown && mode !== "idle") {
     setMode("idle");
   }
 }
@@ -64,5 +64,5 @@ function handleKeyUp(e: KeyboardEvent): void {
 function reset(): void {
   altDown = false;
   shiftDown = false;
-  if (mode === "active") setMode("idle");
+  if (mode !== "idle") setMode("idle");
 }

@@ -1,4 +1,6 @@
-// dialog.ts — comment submission dialog and badge detail dialog.
+// dialog.ts — element feedback dialog (existing comments + compose) and login dialog.
+
+import type { FeedbackComment } from "./api";
 
 const DIALOG_ID = "__fo_dialog__";
 const STYLE_ID = "__fo_styles__";
@@ -19,64 +21,91 @@ function injectStyles(): void {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     #__fo_dialog__ * { box-sizing: border-box; }
+
+    /* ── Main card ─────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-card {
       background: #fff;
       border-radius: 10px;
-      padding: 0;
-      width: 680px;
+      width: 520px;
       max-width: calc(100vw - 32px);
-      max-height: 90vh;
-      overflow: hidden;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+      max-height: 85vh;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.28);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     #__fo_dialog__ .fo-header {
-      padding: 16px 20px 12px;
+      padding: 14px 18px 10px;
       border-bottom: 1px solid #e8e8e8;
+      flex-shrink: 0;
     }
     #__fo_dialog__ .fo-header h2 {
-      margin: 0 0 2px;
-      font-size: 15px;
+      margin: 0 0 3px;
+      font-size: 14px;
       font-weight: 700;
       color: #0f0f0f;
     }
-    #__fo_dialog__ .fo-header .fo-meta {
+    #__fo_dialog__ .fo-selector {
       font-size: 11px;
-      color: #444;
+      color: #555;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       word-break: break-all;
     }
-    #__fo_dialog__ .fo-body {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-      min-height: 0;
-    }
-    #__fo_dialog__ .fo-body.fo-no-screenshot {
-      flex-direction: column;
-      padding: 16px 20px;
-    }
-    #__fo_dialog__ .fo-form-col {
-      flex: 1;
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+
+    /* ── Existing comments ─────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-comments {
+      flex-shrink: 0;
+      max-height: 240px;
       overflow-y: auto;
-      min-width: 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+    #__fo_dialog__ .fo-comment-item {
+      padding: 10px 18px;
+      border-bottom: 1px solid #f2f2f2;
+    }
+    #__fo_dialog__ .fo-comment-item:last-child { border-bottom: none; }
+    #__fo_dialog__ .fo-comment-meta {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      margin-bottom: 3px;
+    }
+    #__fo_dialog__ .fo-comment-author {
+      font-size: 12px;
+      font-weight: 600;
+      color: #0f0f0f;
+    }
+    #__fo_dialog__ .fo-comment-date {
+      font-size: 11px;
+      color: #999;
+    }
+    #__fo_dialog__ .fo-comment-text {
+      font-size: 13px;
+      color: #222;
+      line-height: 1.5;
+    }
+
+    /* ── Compose area ──────────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-compose {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 18px;
+      min-height: 0;
     }
     #__fo_dialog__ .fo-user-bar {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
       font-size: 12px;
-      color: #222;
+      color: #333;
       font-weight: 500;
+      flex-shrink: 0;
     }
     #__fo_dialog__ .fo-user-bar img {
-      width: 22px;
-      height: 22px;
+      width: 20px;
+      height: 20px;
       border-radius: 50%;
       border: 1px solid #ddd;
     }
@@ -84,96 +113,77 @@ function injectStyles(): void {
       width: 100%;
       border: 1px solid #ccc;
       border-radius: 6px;
-      padding: 9px 11px;
+      padding: 8px 10px;
       font-size: 13px;
+      font-family: inherit;
       color: #111;
       resize: vertical;
-      min-height: 90px;
+      min-height: 80px;
       outline: none;
       line-height: 1.5;
       flex: 1;
     }
-    #__fo_dialog__ textarea:focus { border-color: #4f86f7; box-shadow: 0 0 0 3px rgba(79,134,247,0.15); }
-    #__fo_dialog__ textarea::placeholder { color: #999; }
+    #__fo_dialog__ textarea:focus {
+      border-color: #4f86f7;
+      box-shadow: 0 0 0 3px rgba(79,134,247,0.15);
+    }
+    #__fo_dialog__ textarea::placeholder { color: #aaa; }
+    #__fo_dialog__ .fo-error {
+      color: #c53030;
+      font-size: 12px;
+    }
+
+    /* ── Footer ────────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-footer {
-      padding: 12px 20px;
+      padding: 10px 18px;
       border-top: 1px solid #e8e8e8;
       display: flex;
-      justify-content: flex-end;
+      align-items: center;
       gap: 8px;
       background: #fafafa;
+      flex-shrink: 0;
     }
+    #__fo_dialog__ .fo-footer-spacer { flex: 1; }
     #__fo_dialog__ button {
-      padding: 7px 18px;
+      padding: 6px 16px;
       border-radius: 6px;
       border: none;
       cursor: pointer;
       font-size: 13px;
       font-weight: 500;
-      transition: background 0.15s;
+      font-family: inherit;
+      transition: background 0.12s;
     }
-    #__fo_dialog__ .fo-btn-primary {
-      background: #4f86f7;
-      color: #fff;
-    }
+    #__fo_dialog__ .fo-btn-primary { background: #4f86f7; color: #fff; }
     #__fo_dialog__ .fo-btn-primary:hover { background: #3a6fd8; }
     #__fo_dialog__ .fo-btn-primary:disabled { background: #a0baf7; cursor: default; }
-    #__fo_dialog__ .fo-btn-secondary {
-      background: #efefef;
-      color: #222;
-    }
+    #__fo_dialog__ .fo-btn-secondary { background: #efefef; color: #222; }
     #__fo_dialog__ .fo-btn-secondary:hover { background: #e0e0e0; }
-    #__fo_dialog__ .fo-btn-danger {
-      background: #e53e3e;
-      color: #fff;
-    }
-    #__fo_dialog__ .fo-error {
-      color: #c53030;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    #__fo_dialog__ .fo-comment-list {
-      list-style: none;
-      padding: 0;
-      margin: 0 0 12px;
-    }
-    #__fo_dialog__ .fo-comment-list li {
-      padding: 8px 0;
-      border-bottom: 1px solid #f0f0f0;
-      font-size: 13px;
-      color: #222;
-    }
-    #__fo_dialog__ .fo-comment-list li:last-child { border-bottom: none; }
-    #__fo_dialog__ .fo-comment-author {
-      font-weight: 600;
-      color: #111;
-      margin-right: 4px;
-    }
-    #__fo_dialog__ .fo-comment-date {
-      color: #888;
-      font-size: 11px;
-    }
-    /* Login dialog */
+    #__fo_dialog__ .fo-btn-export { background: #1a1a1a; color: #fff; }
+    #__fo_dialog__ .fo-btn-export:hover { background: #333; }
+    #__fo_dialog__ .fo-btn-export:disabled { background: #888; cursor: default; }
+
+    /* ── Login card ────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-login-card {
       background: #fff;
       border-radius: 10px;
-      padding: 28px 28px 20px;
-      width: 360px;
+      padding: 28px 24px 20px;
+      width: 340px;
       max-width: calc(100vw - 32px);
-      box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.28);
     }
     #__fo_dialog__ .fo-login-card h2 {
       margin: 0 0 6px;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       color: #0f0f0f;
     }
-    #__fo_dialog__ .fo-login-card .fo-meta {
+    #__fo_dialog__ .fo-login-card p {
+      margin: 0 0 18px;
       font-size: 13px;
-      color: #444;
-      margin-bottom: 20px;
+      color: #555;
     }
-    #__fo_dialog__ .fo-login-card .fo-actions {
+    #__fo_dialog__ .fo-login-actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
@@ -194,36 +204,58 @@ function getOrCreateDialog(): HTMLElement {
 
 export interface SubmitFeedbackOptions {
   selector: string;
+  existingComments: FeedbackComment[];
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
   onSubmit: (comment: string) => Promise<void>;
+  onExport: (ids: number[]) => Promise<void>;
   onCancel: () => void;
 }
 
-/** Shows the "submit feedback" dialog. */
+/** Shows the element feedback dialog: existing comments + compose area. */
 export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   injectStyles();
   const dialog = getOrCreateDialog();
 
+  const existing = opts.existingComments;
+  const existingIds = existing.map((c) => c.id);
+
+  const commentsHTML = existing.length === 0 ? "" : `
+    <div class="fo-comments">
+      ${existing.map((c) => `
+        <div class="fo-comment-item">
+          <div class="fo-comment-meta">
+            <span class="fo-comment-author">@${escapeHtml(c.github_user)}</span>
+            <span class="fo-comment-date">${escapeHtml(c.created_at)}</span>
+          </div>
+          <div class="fo-comment-text">${escapeHtml(c.comment)}</div>
+        </div>`).join("")}
+    </div>`;
+
+  const title = existing.length > 0
+    ? `${existing.length} comment${existing.length !== 1 ? "s" : ""} on this element`
+    : "Add feedback";
+
   dialog.innerHTML = `
     <div class="fo-card">
       <div class="fo-header">
-        <h2>Submit Feedback</h2>
-        <div class="fo-meta">${escapeHtml(opts.selector)}</div>
+        <h2>${title}</h2>
+        <div class="fo-selector">${escapeHtml(opts.selector)}</div>
       </div>
-      <div class="fo-body fo-no-screenshot">
-        <div class="fo-form-col">
-          <div class="fo-user-bar">
-            <img src="${escapeHtml(opts.user.avatarUrl)}" alt="avatar">
-            <span>Signed in as <strong>${escapeHtml(opts.user.login)}</strong></span>
-          </div>
-          <textarea id="__fo_comment__" placeholder="Describe the issue or leave a comment…"></textarea>
-          <div class="fo-error" id="__fo_err__"></div>
+      ${commentsHTML}
+      <div class="fo-compose">
+        <div class="fo-user-bar">
+          <img src="${escapeHtml(opts.user.avatarUrl)}" alt="">
+          <span>${escapeHtml(opts.user.login)}</span>
         </div>
+        <textarea id="__fo_comment__" placeholder="Add a comment…"></textarea>
+        <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
+        ${existing.length > 0 ? `<button class="fo-btn-export" id="__fo_export__">Send to GitHub</button>` : ""}
+        <div class="fo-footer-spacer"></div>
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>
-        <button class="fo-btn-primary" id="__fo_submit__">Submit Feedback</button>
+        <button class="fo-btn-primary" id="__fo_submit__">Submit</button>
       </div>
     </div>
   `;
@@ -231,6 +263,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const textarea = dialog.querySelector<HTMLTextAreaElement>("#__fo_comment__")!;
   const submitBtn = dialog.querySelector<HTMLButtonElement>("#__fo_submit__")!;
   const cancelBtn = dialog.querySelector<HTMLButtonElement>("#__fo_cancel__")!;
+  const exportBtn = dialog.querySelector<HTMLButtonElement>("#__fo_export__");
   const errDiv = dialog.querySelector<HTMLElement>("#__fo_err__")!;
 
   textarea.focus();
@@ -242,10 +275,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
 
   submitBtn.addEventListener("click", async () => {
     const comment = textarea.value.trim();
-    if (!comment) {
-      errDiv.textContent = "Please enter a comment.";
-      return;
-    }
+    if (!comment) { errDiv.textContent = "Please enter a comment."; return; }
     submitBtn.disabled = true;
     submitBtn.textContent = "Submitting…";
     errDiv.textContent = "";
@@ -255,23 +285,31 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     } catch (err) {
       errDiv.textContent = String(err);
       submitBtn.disabled = false;
-      submitBtn.textContent = "Submit Feedback";
+      submitBtn.textContent = "Submit";
     }
   });
 
-  // Close on backdrop click.
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) {
+  exportBtn?.addEventListener("click", async () => {
+    exportBtn.disabled = true;
+    exportBtn.textContent = "Exporting…";
+    errDiv.textContent = "";
+    try {
+      await opts.onExport(existingIds);
       closeDialog();
-      opts.onCancel();
+    } catch (err) {
+      errDiv.textContent = String(err);
+      exportBtn.disabled = false;
+      exportBtn.textContent = "Send to GitHub";
     }
   });
 
-  // Close on Escape.
+  // Backdrop click / Escape to cancel.
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) { closeDialog(); opts.onCancel(); }
+  });
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
-      closeDialog();
-      opts.onCancel();
+      closeDialog(); opts.onCancel();
       document.removeEventListener("keydown", onKey);
     }
   };
@@ -283,7 +321,6 @@ export interface LoginDialogOptions {
   onCancel: () => void;
 }
 
-/** Shows a "login required" dialog before submitting feedback. */
 export function showLoginDialog(opts: LoginDialogOptions): void {
   injectStyles();
   const dialog = getOrCreateDialog();
@@ -291,16 +328,18 @@ export function showLoginDialog(opts: LoginDialogOptions): void {
   dialog.innerHTML = `
     <div class="fo-login-card">
       <h2>Sign in with GitHub</h2>
-      <div class="fo-meta">Authentication required to submit feedback.</div>
-      <div class="fo-actions">
+      <p>Authentication required to submit feedback.</p>
+      <div class="fo-login-actions">
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>
         <button class="fo-btn-primary" id="__fo_login__">Sign in with GitHub</button>
       </div>
+      <div class="fo-error" id="__fo_err__" style="margin-top:8px"></div>
     </div>
   `;
 
   const loginBtn = dialog.querySelector<HTMLButtonElement>("#__fo_login__")!;
   const cancelBtn = dialog.querySelector<HTMLButtonElement>("#__fo_cancel__")!;
+  const errDiv = dialog.querySelector<HTMLElement>("#__fo_err__")!;
 
   loginBtn.addEventListener("click", async () => {
     loginBtn.disabled = true;
@@ -311,25 +350,14 @@ export function showLoginDialog(opts: LoginDialogOptions): void {
     } catch (err) {
       loginBtn.disabled = false;
       loginBtn.textContent = "Sign in with GitHub";
-      const errDiv = document.createElement("div");
-      errDiv.className = "fo-error";
-      errDiv.style.marginTop = "8px";
       errDiv.textContent = String(err);
-      loginBtn.parentElement?.insertAdjacentElement("afterend", errDiv);
     }
   });
 
-  cancelBtn.addEventListener("click", () => {
-    closeDialog();
-    opts.onCancel();
-  });
+  cancelBtn.addEventListener("click", () => { closeDialog(); opts.onCancel(); });
 
-  // Close on backdrop click.
   dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) {
-      closeDialog();
-      opts.onCancel();
-    }
+    if (e.target === dialog) { closeDialog(); opts.onCancel(); }
   });
 }
 

@@ -152,7 +152,7 @@ jobs:
           ELAPSED=0
           echo "Polling http://localhost:8080/health on feedback-server for up to ${TIMEOUT}s..."
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            RESPONSE=$(ssh feedback-server "wget -qO- --timeout=5 http://localhost:8080/health 2>&1 || echo FAIL")
+            RESPONSE=$(ssh feedback-server "wget -qO- --timeout=5 http://localhost:3014/health 2>&1 || echo FAIL")
             echo "  [${ELAPSED}s] $RESPONSE"
             if echo "$RESPONSE" | grep -q '"ok"'; then
               echo "Health check passed after ${ELAPSED}s"

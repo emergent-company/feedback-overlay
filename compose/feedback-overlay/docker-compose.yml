@@ -22,9 +22,10 @@ services:
       - feedback-data:/data
     env_file:
       - .env
-    # Route public hostnames to Traefik (internal reverse proxy at 10.10.10.20).
+    # Route public hostnames to the internal reverse proxy.
+    # Set via TRAEFIK_HOST env var or remove extra_hosts if using external DNS.
     extra_hosts:
-      - "feedback.emergent-company.ai:10.10.10.20"
+      - "feedback.emergent-company.ai:${TRAEFIK_HOST:-127.0.0.1}"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 10s

@@ -109,8 +109,8 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' \
             'Host feedback-server' \
-            '  HostName 100.112.108.106' \
-            '  User root' \
+            "  HostName ${{ secrets.DEPLOY_HOST }}" \
+            "  User ${{ secrets.DEPLOY_USER }}" \
             '  IdentityFile ~/.ssh/id_deploy' \
             '  StrictHostKeyChecking accept-new' \
             '  ConnectTimeout 15' \
@@ -134,6 +134,7 @@ jobs:
             "GITHUB_REDIRECT_URI=https://feedback.emergent-company.ai/auth/callback" \
             "JWT_SECRET=${{ secrets.FEEDBACK_JWT_SECRET }}" \
             "ALLOWED_ORIGINS=${{ secrets.FEEDBACK_ALLOWED_ORIGINS }}" \
+            "TRAEFIK_HOST=${{ secrets.TRAEFIK_HOST }}" \
             | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
 
       - name: Pull and restart

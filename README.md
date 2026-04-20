@@ -1,0 +1,258 @@
+# feedback-overlay
+
+A lightweight, drop-in feedback tool for any web app. Users hold `Alt+Shift` to enter element-selection mode, click any element to leave a comment, and export feedback directly to GitHub Issues — with full CSS context, computed styles, and element HTML attached automatically.
+
+---
+
+## Features
+
+- **Zero-config install** — one `<script>` tag, no framework required
+- **Element-level feedback** — click any element; the CSS selector, computed styles, and element HTML are captured automatically
+- **Bug / Enhancement tagging** — choose the type before submitting; the correct label is applied to the GitHub issue
+- **CSS context** — detects framework (Tailwind, DaisyUI, Bootstrap, MUI, Chakra, Radix, shadcn), captures key computed styles, element position and viewport size
+- **`data-component` support** — if an element or ancestor has `data-component="MyWidget"`, the component name is shown in the hover tooltip
+- **GitHub OAuth** — users sign in with GitHub; session persists across page reloads (30-day JWT in `localStorage`)
+- **Export to GitHub Issues** — creates a well-structured issue with comments, selector, position, CSS framework, computed styles, and pretty-printed HTML
+- **Badge overlays** — elements with existing feedback show a count badge in selection mode; clicking a badge reopens the dialog for that element
+
+---
+
+## Installation
+
+### 1. Add the script tag
+
+Add the following snippet to your HTML, just before `</body>`:
+
+```html
+<script
+  src="https://feedback.emergent-company.ai/feedback-overlay.js"
+  data-api="https://feedback.emergent-company.ai"
+  data-repo="your-org/your-repo"
+  data-label="feedback"
+  async
+></script>
+```
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `data-api` | No | API base URL. Defaults to `https://feedback.emergent-company.ai` |
+| `data-repo` | Yes | GitHub repo to create issues in (e.g. `acme/my-app`) |
+| `data-label` | No | Base label applied to all issues. Defaults to `feedback` |
+
+### 2. Ensure GitHub labels exist
+
+The repo must have `bug` and `enhancement` labels. GitHub creates these by default on new repos. To add them manually:
+
+```bash
+gh label create bug      --color d73a4a --repo your-org/your-repo
+gh label create enhancement --color a2eeef --repo your-org/your-repo
+gh label create feedback --color ededed  --repo your-org/your-repo
+```
+
+### 3. That's it
+
+No build step, no npm install, no configuration file. The script self-initialises on page load.
+
+---
+
+## Usage
+
+| Action | Result |
+|--------|--------|
+| Hold `Alt+Shift` | Enter element-selection mode (crosshair cursor + blue highlights) |
+| Hover an element | Tooltip shows element tag (or `data-component` name if set) |
+| Click an element | Opens the feedback dialog |
+| Release `Alt+Shift` | Exits selection mode (dialog stays open if already clicked) |
+
+### Feedback dialog
+
+1. Existing comments for that element are shown at the top (scrollable)
+2. Type a new comment in the textarea
+3. Select **Bug** or **Enhancement**
+4. **Submit** — saves the comment without creating a GitHub issue
+5. **Send to GitHub** — submits the comment (if any) and creates a GitHub issue with full context
+
+### `data-component` attribute
+
+Add `data-component` to any element to make it show a friendly name in the hover tooltip instead of the raw CSS selector:
+
+```html
+<div data-component="PricingCard">
+  <!-- child elements will show "PricingCard" in the tooltip -->
+</div>
+```
+
+---
+
+## Self-hosting
+
+### Requirements
+
+- Docker + Docker Compose
+- A GitHub OAuth App
+- A server reachable by your users
+
+### 1. Create a GitHub OAuth App
+
+Go to **GitHub → Settings → Developer settings → OAuth Apps → New OAuth App**:
+
+| Field | Value |
+|-------|-------|
+| Application name | feedback-overlay |
+| Homepage URL | `https://your-domain.example.com` |
+| Authorization callback URL | `https://your-domain.example.com/auth/callback` |
+
+Note the **Client ID** and generate a **Client Secret**.
+
+### 2. Create a JWT secret
+
+```bash
+openssl rand -hex 32
+```
+
+### 3. Write your compose file
+
+```yaml
+# docker-compose.yml
+services:
+  feedback-overlay:
+    image: ghcr.io/emergent-company/feedback-overlay:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - feedback_data:/data
+    environment:
+      PORT: "8080"
+      DB_PATH: /data/feedback-overlay.db
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GITHUB_REDIRECT_URI: https://your-domain.example.com/auth/callback
+      JWT_SECRET: ${JWT_SECRET}
+
+volumes:
+  feedback_data:
+```
+
+### 4. Write your `.env`
+
+```env
+GITHUB_CLIENT_ID=<your client id>
+GITHUB_CLIENT_SECRET=<your client secret>
+JWT_SECRET=<your random secret>
+```
+
+### 5. Start
+
+```bash
+docker compose up -d
+```
+
+### 6. Update your script tag
+
+Point `data-api` to your own domain:
+
+```html
+<script
+  src="https://your-domain.example.com/feedback-overlay.js"
+  data-api="https://your-domain.example.com"
+  data-repo="your-org/your-repo"
+  async
+></script>
+```
+
+---
+
+## GitHub Issue format
+
+When feedback is exported, the issue looks like this:
+
+```
+Title: Feedback on button.fo-btn-primary
+
+## Feedback
+
+**URL:** https://app.example.com/dashboard
+**Viewport:** 1440 × 900 px
+
+---
+
+### Comment 1
+
+**@alice**
+The button colour doesn't meet contrast requirements.
+
+---
+
+**Selector:** `main > section > button.fo-btn-primary`
+**Position:** top 340, left 120 — **Size:** 120 × 36 px
+**CSS framework:** Tailwind CSS, DaisyUI
+
+<details><summary>Computed styles</summary>
+...
+</details>
+
+<details><summary>Element HTML & full context</summary>
+...
+</details>
+```
+
+Labels applied: `feedback`, `bug` or `enhancement` (whichever was selected in the dialog).
+
+---
+
+## Development
+
+### Prerequisites
+
+- Go 1.21+
+- Node.js 18+
+- [go-task](https://taskfile.dev) (`brew install go-task`)
+
+### Run locally
+
+```bash
+# Install Node deps
+npm install
+
+# Build JS bundle + start the Go server with live reload
+task dev
+```
+
+The server listens on `http://localhost:8080` by default.
+
+### Build
+
+```bash
+# Build JS bundle only
+npm run build --prefix client
+
+# Build Go binary
+go build ./server/...
+
+# Build Docker image
+docker build -t feedback-overlay .
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP listen port |
+| `DB_PATH` | `./feedback-overlay.db` | SQLite database path |
+| `GITHUB_CLIENT_ID` | — | OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | — | OAuth App client secret |
+| `GITHUB_REDIRECT_URI` | — | Must match the OAuth App callback URL |
+| `JWT_SECRET` | — | Secret used to sign session JWTs |
+
+---
+
+## Versioning
+
+This project uses [Semantic Versioning](https://semver.org). The current version is stored in the `VERSION` file at the repo root and is embedded into the Docker image at build time. The `/health` endpoint reports the running version and commit SHA:
+
+```json
+{"ok": true, "version": "0.2.0", "commit": "ff46ac7"}
+```
+
+Releases are tagged in Git (`v0.2.0`) and published as GitHub Releases with a corresponding Docker image tag on GHCR (`ghcr.io/emergent-company/feedback-overlay:v0.2.0`).

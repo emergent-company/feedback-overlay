@@ -65,15 +65,24 @@ function buildPath(el: Element): string {
 
 /**
  * Returns a human-readable label for the element (for display in UI).
- * Uses data-component from the element or nearest ancestor if present.
+ * If the element is inside a component, returns "ComponentName > tag > tag"
+ * showing the path from the component boundary down to the element.
+ * Falls back to a tag/id/class description when no data-component is found.
  */
 export function elementLabel(el: Element): string {
   let node: Element | null = el;
+  const inner: string[] = [];
+
   while (node && node !== document.documentElement) {
     const component = node.getAttribute("data-component");
-    if (component) return component;
+    if (component) {
+      const parts = [component, ...inner.reverse()];
+      return parts.join(" > ");
+    }
+    inner.push(node.tagName.toLowerCase());
     node = node.parentElement;
   }
+
   const tag = el.tagName.toLowerCase();
   const id = el.id ? `#${el.id}` : "";
   const cls = el.classList.length

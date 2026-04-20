@@ -176,7 +176,7 @@ import { buildSelector } from "./selector";
       viewport: { width: window.innerWidth, height: window.innerHeight },
       devicePixelRatio: window.devicePixelRatio,
       tagName: el.tagName.toLowerCase(),
-      dataComponent: findDataComponent(el) ?? undefined,
+      dataComponent: buildComponentPath(el) ?? undefined,
       outerHTML: el.outerHTML?.slice(0, 4000) ?? "",
       innerText: (el as HTMLElement).innerText?.slice(0, 200) ?? "",
       attributes: gatherAttributes(el),
@@ -193,12 +193,23 @@ import { buildSelector } from "./selector";
     };
   }
 
-  // Walk up the DOM tree to find the nearest data-component attribute.
-  function findDataComponent(el: Element): string | null {
+  // Walk up the DOM tree to find the nearest ancestor (or self) with data-component.
+  // If the element itself IS the component root, returns just the component name.
+  // If it is a descendant, returns "ComponentName > tag > tag > tag" showing
+  // the relative path from the component boundary down to the clicked element.
+  function buildComponentPath(el: Element): string | null {
     let node: Element | null = el;
-    while (node) {
+    // innermost-first accumulator; does NOT include the component root node itself.
+    const inner: string[] = [];
+
+    while (node && node !== document.documentElement) {
       const val = node.getAttribute("data-component");
-      if (val) return val;
+      if (val) {
+        // inner is currently [el.tag, parent.tag, ...] — reverse to get top-down order.
+        const parts = [val, ...inner.reverse()];
+        return parts.join(" > ");
+      }
+      inner.push(node.tagName.toLowerCase());
       node = node.parentElement;
     }
     return null;

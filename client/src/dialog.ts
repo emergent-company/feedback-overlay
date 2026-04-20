@@ -386,7 +386,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const metaRows: [string, string][] = [];
 
   // Element
-  const component = findDataComponent(opts.selector, ctx);
+  const component = ctx["dataComponent"] as string | undefined;
   if (component) metaRows.push(["component", component]);
   metaRows.push(["selector", opts.selector]);
   const br = ctx["boundingRect"] as Record<string, number> | undefined;
@@ -598,18 +598,6 @@ export function closeDialog(): void {
   if (dialog) dialog.remove();
 }
 
-// Try to find a data-component value from context attributes or outerHTML.
-function findDataComponent(_selector: string, ctx: Record<string, unknown>): string | null {
-  const attrs = ctx["attributes"] as Record<string, string> | undefined;
-  if (attrs?.["data-component"]) return attrs["data-component"];
-  // Try parsing outerHTML for data-component on the element itself.
-  const html = ctx["outerHTML"] as string | undefined;
-  if (html) {
-    const m = html.match(/data-component="([^"]+)"/);
-    if (m) return m[1];
-  }
-  return null;
-}
 
 // ── HTML syntax highlighter ──────────────────────────────────────────────────
 // Tokenises raw HTML and returns a highlighted string safe to inject as

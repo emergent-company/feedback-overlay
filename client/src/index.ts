@@ -93,11 +93,18 @@ import { buildSelector } from "./selector";
 
     forceMode("commenting");
 
+    // Build the default issue title the same way the server does.
+    const selectorShort = selector.split(">").pop()?.trim() ?? selector;
+    const defaultIssueTopic = existingComments.length > 0
+      ? `Feedback: ${existingComments.length + 1} comments on ${selectorShort}`
+      : `Feedback on ${selectorShort}`;
+
     showSubmitDialog({
       selector,
       existingComments,
       context,
       user,
+      defaultIssueTopic,
       onSubmit: async (comment, type: FeedbackType) => {
         const result = await api.createFeedback({
           url: window.location.href,
@@ -114,11 +121,12 @@ import { buildSelector } from "./selector";
         forceMode("active");
         return result.id;
       },
-      onExport: async (ids, type: FeedbackType) => {
+      onExport: async (ids, type: FeedbackType, issueTopic: string) => {
         const result = await api.exportIssue({
           ids,
           repo: config.repo,
           labels: [config.label, type],
+          title: issueTopic,
         });
         window.open(result.issue_url, "_blank");
         // Refresh badges after export.

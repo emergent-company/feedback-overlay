@@ -30,6 +30,7 @@ export interface ExportIssueParams {
   ids: number[];
   repo: string;
   labels?: string[];
+  title?: string;
 }
 
 export interface ExportIssueResult {

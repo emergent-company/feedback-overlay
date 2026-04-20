@@ -16,9 +16,10 @@ import (
 
 // exportIssueRequest is the JSON body for POST /issue/export.
 type exportIssueRequest struct {
-	IDs    []int64 `json:"ids"`
-	Repo   string  `json:"repo"`
+	IDs    []int64  `json:"ids"`
+	Repo   string   `json:"repo"`
 	Labels []string `json:"labels"`
+	Title  string   `json:"title"` // optional override; server generates one if empty
 }
 
 // HandleExportIssue creates a GitHub issue from one or more feedback items.
@@ -52,6 +53,9 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 	}
 
 	title, body := buildIssueContent(items, middleware.GetLogin(c))
+	if req.Title != "" {
+		title = req.Title
+	}
 
 	result, err := github.CreateIssue(ctx, middleware.GetGitHubToken(c), github.CreateIssueParams{
 		Repo:   req.Repo,

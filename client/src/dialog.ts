@@ -196,6 +196,85 @@ function injectStyles(): void {
     #__fo_dialog__ .fo-btn-export:hover { background: #333; }
     #__fo_dialog__ .fo-btn-export:disabled { background: #888; cursor: default; }
 
+    /* ── Metadata collapsible ──────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-meta-toggle {
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-meta-toggle summary {
+      font-size: 11px;
+      color: #888;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    #__fo_dialog__ .fo-meta-toggle summary::-webkit-details-marker { display: none; }
+    #__fo_dialog__ .fo-meta-toggle summary::before {
+      content: "▶";
+      font-size: 8px;
+      transition: transform 0.15s;
+      display: inline-block;
+    }
+    #__fo_dialog__ .fo-meta-toggle[open] summary::before { transform: rotate(90deg); }
+    #__fo_dialog__ .fo-meta-grid {
+      margin-top: 6px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 10px;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    #__fo_dialog__ .fo-meta-key {
+      color: #999;
+      white-space: nowrap;
+    }
+    #__fo_dialog__ .fo-meta-val {
+      color: #222;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+    #__fo_dialog__ .fo-meta-section-title {
+      grid-column: 1 / -1;
+      font-weight: 600;
+      color: #555;
+      font-family: inherit;
+      margin-top: 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Issue topic override ───────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-topic-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-topic-label {
+      font-size: 11px;
+      color: #888;
+    }
+    #__fo_dialog__ .fo-topic-input {
+      width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      color: #111;
+      outline: none;
+      background: #fafafa;
+    }
+    #__fo_dialog__ .fo-topic-input:focus {
+      border-color: #4f86f7;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(79,134,247,0.12);
+    }
+
     /* ── Login card ────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-login-card {
       background: #fff;
@@ -242,8 +321,9 @@ export interface SubmitFeedbackOptions {
   existingComments: FeedbackComment[];
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
+  defaultIssueTopic: string;
   onSubmit: (comment: string, type: FeedbackType) => Promise<number>; // returns new feedback ID
-  onExport: (ids: number[], type: FeedbackType) => Promise<void>;
+  onExport: (ids: number[], type: FeedbackType, issueTopic: string) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -254,6 +334,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
 
   const existing = opts.existingComments;
   const existingIds = existing.map((c) => c.id);
+  const ctx = opts.context;
 
   const commentsHTML = existing.length === 0 ? "" : `
     <div class="fo-comments">
@@ -270,6 +351,42 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const title = existing.length > 0
     ? `${existing.length} comment${existing.length !== 1 ? "s" : ""} on this element`
     : "Add feedback";
+
+  // ── Build metadata rows ────────────────────────────────────────────────────
+  const metaRows: [string, string][] = [];
+
+  // Element
+  const component = findDataComponent(opts.selector, ctx);
+  if (component) metaRows.push(["component", component]);
+  metaRows.push(["selector", opts.selector]);
+  const br = ctx["boundingRect"] as Record<string, number> | undefined;
+  if (br) metaRows.push(["position", `top ${br["top"]}, left ${br["left"]} — ${br["width"]} × ${br["height"]} px`]);
+
+  // Page
+  metaRows.push(["url", String(ctx["url"] ?? window.location.href)]);
+  const vp = ctx["viewport"] as Record<string, number> | undefined;
+  const dpr = ctx["devicePixelRatio"] as number | undefined;
+  if (vp) metaRows.push(["viewport", `${vp["width"]} × ${vp["height"]} px${dpr && dpr !== 1 ? ` (${dpr}× DPR)` : ""}`]);
+
+  // CSS
+  const frameworks = ctx["cssFramework"] as string[] | undefined;
+  if (frameworks?.length) metaRows.push(["css framework", frameworks.join(", ")]);
+  const styles = ctx["computedStyles"] as Record<string, string> | undefined;
+  if (styles) {
+    const keyStyles = ["display", "position", "color", "backgroundColor", "fontSize", "fontFamily", "fontWeight", "padding", "margin", "borderRadius"]
+      .filter((k) => styles[k])
+      .map((k) => `${k}: ${styles[k]}`)
+      .join("\n");
+    if (keyStyles) metaRows.push(["computed styles", keyStyles]);
+  }
+
+  // Browser
+  const ua = String(ctx["userAgent"] ?? navigator.userAgent);
+  metaRows.push(["user agent", ua]);
+
+  const metaHTML = metaRows.map(([k, v]) => `
+    <div class="fo-meta-key">${escapeHtml(k)}</div>
+    <div class="fo-meta-val">${escapeHtml(v)}</div>`).join("");
 
   dialog.innerHTML = `
     <div class="fo-card">
@@ -290,6 +407,10 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <input type="radio" name="__fo_type__" id="__fo_type_enh__" value="enhancement" checked>
           <label for="__fo_type_enh__">✨ Enhancement</label>
         </div>
+        <details class="fo-meta-toggle">
+          <summary>Context that will be attached</summary>
+          <div class="fo-meta-grid">${metaHTML}</div>
+        </details>
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
@@ -310,6 +431,28 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const getType = (): FeedbackType => {
     const checked = dialog.querySelector<HTMLInputElement>("input[name='__fo_type__']:checked");
     return (checked?.value ?? "enhancement") as FeedbackType;
+  };
+
+  // Inject the topic input lazily when "Send to GitHub" is clicked the first time,
+  // showing it expanded above the footer so the user can review/edit before confirming.
+  let topicInjected = false;
+  const injectTopicInput = () => {
+    if (topicInjected) return;
+    topicInjected = true;
+    const topicRow = document.createElement("div");
+    topicRow.className = "fo-topic-row";
+    topicRow.innerHTML = `
+      <label class="fo-topic-label" for="__fo_topic__">Issue title</label>
+      <input class="fo-topic-input" id="__fo_topic__" type="text" value="${escapeHtml(opts.defaultIssueTopic)}">
+    `;
+    // Insert between compose area and footer.
+    const footer = dialog.querySelector(".fo-footer")!;
+    dialog.querySelector(".fo-card")!.insertBefore(topicRow, footer);
+  };
+
+  const getIssueTopic = (): string => {
+    const input = dialog.querySelector<HTMLInputElement>("#__fo_topic__");
+    return (input?.value.trim() || opts.defaultIssueTopic);
   };
 
   textarea.focus();
@@ -336,6 +479,13 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   });
 
   exportBtn.addEventListener("click", async () => {
+    // First click: show the topic input and let user review, change button to confirm.
+    if (!topicInjected) {
+      injectTopicInput();
+      exportBtn.textContent = "Confirm & Send";
+      return;
+    }
+
     exportBtn.disabled = true;
     exportBtn.textContent = "Exporting…";
     submitBtn.disabled = true;
@@ -343,6 +493,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     try {
       const comment = textarea.value.trim();
       const type = getType();
+      const topic = getIssueTopic();
       let ids = [...existingIds];
       if (comment) {
         // Submit the new comment first, then include its ID in the export.
@@ -352,16 +503,16 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
       if (ids.length === 0) {
         errDiv.textContent = "Nothing to export — add a comment first.";
         exportBtn.disabled = false;
-        exportBtn.textContent = "Send to GitHub";
+        exportBtn.textContent = "Confirm & Send";
         submitBtn.disabled = false;
         return;
       }
-      await opts.onExport(ids, type);
+      await opts.onExport(ids, type, topic);
       closeDialog();
     } catch (err) {
       errDiv.textContent = String(err);
       exportBtn.disabled = false;
-      exportBtn.textContent = "Send to GitHub";
+      exportBtn.textContent = "Confirm & Send";
       submitBtn.disabled = false;
     }
   });
@@ -427,6 +578,19 @@ export function showLoginDialog(opts: LoginDialogOptions): void {
 export function closeDialog(): void {
   const dialog = document.getElementById(DIALOG_ID);
   if (dialog) dialog.remove();
+}
+
+// Try to find a data-component value from context attributes or outerHTML.
+function findDataComponent(_selector: string, ctx: Record<string, unknown>): string | null {
+  const attrs = ctx["attributes"] as Record<string, string> | undefined;
+  if (attrs?.["data-component"]) return attrs["data-component"];
+  // Try parsing outerHTML for data-component on the element itself.
+  const html = ctx["outerHTML"] as string | undefined;
+  if (html) {
+    const m = html.match(/data-component="([^"]+)"/);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 function escapeHtml(s: string): string {

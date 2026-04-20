@@ -7,7 +7,7 @@ import { startActivationListener, onModeChange, forceMode, getMode } from "./act
 import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
 import { showSubmitDialog, showLoginDialog, closeDialog, type FeedbackType } from "./dialog";
-import { buildSelector, snapToComponent } from "./selector";
+import { buildSelector } from "./selector";
 
 (function bootstrap() {
   if ((window as any).__feedbackOverlayLoaded) return;
@@ -65,11 +65,8 @@ import { buildSelector, snapToComponent } from "./selector";
 
   // ── Shared: open feedback dialog for an element ─────────────────────────────
   async function openFeedbackDialog(target: Element): Promise<void> {
-    // Snap to the nearest component root so feedback is always attached to the
-    // component boundary rather than an arbitrary inner element.
-    const snapped = snapToComponent(target);
-    const selector = buildSelector(snapped);
-    const context = gatherContext(snapped);
+    const selector = buildSelector(target);
+    const context = gatherContext(target);
 
     forceMode("capturing");
     document.body.style.cursor = "";

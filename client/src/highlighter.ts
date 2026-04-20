@@ -1,6 +1,6 @@
 // highlighter.ts — element hover highlight (outline box + tooltip label).
 
-import { buildSelector, elementLabel, nearestComponent, snapToComponent } from "./selector";
+import { buildSelector, elementLabel, nearestComponent } from "./selector";
 
 const OVERLAY_ID = "__fo_highlight__";
 const TOOLTIP_ID = "__fo_tooltip__";
@@ -28,15 +28,11 @@ function getOrCreate(id: string, tag = "div"): HTMLElement {
 /** Shows the highlight box and tooltip over el. */
 export function highlight(el: Element): void {
   currentEl = el;
-
-  // Snap to component root for both the outline box and the label — this
-  // matches exactly what will happen on click.
-  const snapped = snapToComponent(el);
-  const rect = snapped.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
 
-  const hasComponent = nearestComponent(snapped) !== null;
+  const hasComponent = nearestComponent(el) !== null;
   const color = hasComponent ? COLOR_COMPONENT : COLOR_PLAIN;
   const bgColor = hasComponent ? COLOR_COMPONENT_BG : COLOR_PLAIN_BG;
 
@@ -56,7 +52,7 @@ export function highlight(el: Element): void {
     transition: "all 80ms ease",
   });
 
-  const label = elementLabel(snapped);
+  const label = elementLabel(el);
   const tip = getOrCreate(TOOLTIP_ID);
   tip.textContent = label;
 

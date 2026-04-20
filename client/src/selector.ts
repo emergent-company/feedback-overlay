@@ -64,6 +64,20 @@ function buildPath(el: Element): string {
 }
 
 /**
+ * Returns the nearest data-component value found on el or any ancestor,
+ * or null if none exists.
+ */
+export function nearestComponent(el: Element): string | null {
+  let node: Element | null = el;
+  while (node && node !== document.documentElement) {
+    const v = node.getAttribute("data-component");
+    if (v) return v;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
  * Returns a human-readable label for the element (for display in UI).
  * If the element is inside a component, returns "ComponentName > tag > tag"
  * showing the path from the component boundary down to the element.
@@ -76,8 +90,8 @@ export function elementLabel(el: Element): string {
   while (node && node !== document.documentElement) {
     const component = node.getAttribute("data-component");
     if (component) {
-      const parts = [component, ...inner.reverse()];
-      return parts.join(" > ");
+      // inner is accumulated innermost-first; reverse for top-down order.
+      return [component, ...inner.reverse()].join(" > ");
     }
     inner.push(node.tagName.toLowerCase());
     node = node.parentElement;

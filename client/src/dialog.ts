@@ -251,17 +251,23 @@ function injectStyles(): void {
     #__fo_dialog__ .fo-html-preview {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 11px;
-      line-height: 1.5;
+      line-height: 1.6;
       white-space: pre;
       overflow: auto;
-      max-height: 150px;
+      max-height: 160px;
       margin: 6px 0 0;
-      padding: 6px 8px;
-      background: #f5f5f5;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-      color: #333;
+      padding: 8px 10px;
+      background: #1e1e2e;
+      border-radius: 5px;
+      border: 1px solid #313149;
+      color: #cdd6f4;
     }
+    /* syntax token colours (Catppuccin-ish dark) */
+    #__fo_dialog__ .fo-ht  { color: #89b4fa; }   /* tag name */
+    #__fo_dialog__ .fo-ha  { color: #a6e3a1; }   /* attr name */
+    #__fo_dialog__ .fo-hv  { color: #fab387; }   /* attr value */
+    #__fo_dialog__ .fo-hd  { color: #6c7086; }   /* doctype / comment */
+    #__fo_dialog__ .fo-hp  { color: #89dceb; }   /* punctuation <, >, = */
 
     /* ── Issue topic override ───────────────────────────────────────────────── */
     #__fo_dialog__ .fo-topic-row {
@@ -417,7 +423,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         ${outerHTML ? `
         <details class="fo-meta-toggle">
           <summary>Element HTML</summary>
-          <pre class="fo-html-preview">${escapeHtml(outerHTML)}</pre>
+          <pre class="fo-html-preview">${highlightHTML(outerHTML)}</pre>
         </details>` : ""}
       </div>
       ${commentsHTML}
@@ -593,6 +599,90 @@ function findDataComponent(_selector: string, ctx: Record<string, unknown>): str
     if (m) return m[1];
   }
   return null;
+}
+
+// ── HTML syntax highlighter ──────────────────────────────────────────────────
+// Tokenises raw HTML and returns a highlighted string safe to inject as
+// innerHTML into a <pre>. No external deps.
+function highlightHTML(raw: string): string {
+  // Regex that matches one HTML token at a time.
+  const TOKEN = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/?([\w:-]+)((?:\s+[\w:-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?)*)\s*\/?>|[^<]+/gi;
+  const ATTR  = /([\w:-]+)(\s*=\s*(?:"([^"]*)")|'([^']*)'|([^\s>]*))?/g;
+
+  const e = (s: string) => s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  function span(cls: string, text: string): string {
+    return `<span class="${cls}">${text}</span>`;
+  }
+
+  // Indent tracker.
+  let indent = 0;
+  const INDENT_SIZE = 2;
+  const VOID = new Set(["area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"]);
+
+  function pad(): string { return " ".repeat(indent * INDENT_SIZE); }
+
+  const out: string[] = [];
+
+  let match: RegExpExecArray | null;
+  TOKEN.lastIndex = 0;
+
+  while ((match = TOKEN.exec(raw)) !== null) {
+    const full = match[0];
+    const tagName = match[1];
+
+    // Comment / doctype
+    if (full.startsWith("<!--") || full.startsWith("<!")) {
+      out.push(pad() + span("fo-hd", e(full)) + "\n");
+      continue;
+    }
+
+    // Text node — skip blank whitespace-only nodes
+    if (!full.startsWith("<")) {
+      const text = full.trim();
+      if (text) out.push(pad() + e(text) + "\n");
+      continue;
+    }
+
+    const isClose  = full.startsWith("</");
+    const isSelf   = full.endsWith("/>") || (tagName && VOID.has(tagName.toLowerCase()));
+
+    if (isClose) indent = Math.max(0, indent - 1);
+
+    // Build highlighted tag string.
+    let tag = span("fo-hp", "&lt;") + (isClose ? span("fo-hp", "/") : "");
+    tag += span("fo-ht", e(tagName ?? ""));
+
+    // Highlight attributes.
+    const attrStr = match[2] ?? "";
+    if (attrStr.trim()) {
+      ATTR.lastIndex = 0;
+      let am: RegExpExecArray | null;
+      while ((am = ATTR.exec(attrStr)) !== null) {
+        const name = am[1];
+        const rest = am[2] ?? ""; // includes the = and value
+        tag += " " + span("fo-ha", e(name));
+        if (rest) {
+          // split off = and value
+          const eqIdx = rest.indexOf("=");
+          const val = rest.slice(eqIdx + 1).trim();
+          tag += span("fo-hp", "=") + span("fo-hv", e(val));
+        }
+      }
+    }
+
+    tag += (isSelf && !isClose ? span("fo-hp", " /&gt;") : span("fo-hp", "&gt;"));
+
+    out.push(pad() + tag + "\n");
+
+    if (!isClose && !isSelf) indent++;
+  }
+
+  return out.join("").trimEnd();
 }
 
 function escapeHtml(s: string): string {

@@ -28,11 +28,33 @@
       border-bottom: 1px solid #e8e8e8;
       flex-shrink: 0;
     }
-    #__fo_dialog__ .fo-header h2 {
-      margin: 0 0 3px;
+    #__fo_dialog__ .fo-header-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+    #__fo_dialog__ .fo-header-top h2 {
+      margin: 0;
       font-size: 14px;
       font-weight: 700;
       color: #0f0f0f;
+      flex: 1;
+    }
+    #__fo_dialog__ .fo-user-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #666;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-user-pill img {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid #ddd;
     }
     #__fo_dialog__ .fo-selector {
       font-size: 11px;
@@ -83,21 +105,7 @@
       padding: 12px 18px;
       min-height: 0;
     }
-    #__fo_dialog__ .fo-user-bar {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 12px;
-      color: #333;
-      font-weight: 500;
-      flex-shrink: 0;
-    }
-    #__fo_dialog__ .fo-user-bar img {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      border: 1px solid #ddd;
-    }
+
     #__fo_dialog__ textarea {
       width: 100%;
       border: 1px solid #ccc;
@@ -327,7 +335,13 @@
     <div class="fo-meta-val">${S(m)}</div>`).join(""),C=n.outerHTML;e.innerHTML=`
     <div class="fo-card">
       <div class="fo-header">
-        <h2>${l}</h2>
+        <div class="fo-header-top">
+          <h2>${l}</h2>
+          <div class="fo-user-pill">
+            <img src="${S(t.user.avatarUrl)}" alt="">
+            <span>${S(t.user.login)}</span>
+          </div>
+        </div>
         <details class="fo-meta-toggle">
           <summary>Context that will be attached</summary>
           <div class="fo-meta-grid">${k}</div>
@@ -340,10 +354,6 @@
       </div>
       ${s}
       <div class="fo-compose">
-        <div class="fo-user-bar">
-          <img src="${S(t.user.avatarUrl)}" alt="">
-          <span>${S(t.user.login)}</span>
-        </div>
         <div class="fo-topic-row">
           <label class="fo-topic-label" for="__fo_topic__">Issue title</label>
           <input class="fo-topic-input" id="__fo_topic__" type="text" value="${S(t.defaultIssueTopic)}">

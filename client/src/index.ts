@@ -93,11 +93,12 @@ import { buildSelector } from "./selector";
 
     forceMode("commenting");
 
-    // Build the default issue title the same way the server does.
-    const selectorShort = selector.split(">").pop()?.trim() ?? selector;
+    // Build the default issue title. Prefer data-component over the CSS selector.
+    const dataComponent = context["dataComponent"] as string | undefined;
+    const elementLabel = dataComponent ?? (selector.split(">").pop()?.trim() ?? selector);
     const defaultIssueTopic = existingComments.length > 0
-      ? `Feedback: ${existingComments.length + 1} comments on ${selectorShort}`
-      : `Feedback on ${selectorShort}`;
+      ? `Feedback: ${existingComments.length + 1} comments on ${elementLabel}`
+      : `Feedback on ${elementLabel}`;
 
     showSubmitDialog({
       selector,
@@ -175,6 +176,7 @@ import { buildSelector } from "./selector";
       viewport: { width: window.innerWidth, height: window.innerHeight },
       devicePixelRatio: window.devicePixelRatio,
       tagName: el.tagName.toLowerCase(),
+      dataComponent: findDataComponent(el) ?? undefined,
       outerHTML: el.outerHTML?.slice(0, 4000) ?? "",
       innerText: (el as HTMLElement).innerText?.slice(0, 200) ?? "",
       attributes: gatherAttributes(el),
@@ -189,6 +191,17 @@ import { buildSelector } from "./selector";
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // Walk up the DOM tree to find the nearest data-component attribute.
+  function findDataComponent(el: Element): string | null {
+    let node: Element | null = el;
+    while (node) {
+      const val = node.getAttribute("data-component");
+      if (val) return val;
+      node = node.parentElement;
+    }
+    return null;
   }
 
   function gatherAttributes(el: Element): Record<string, string> {

@@ -247,6 +247,22 @@ function injectStyles(): void {
       letter-spacing: 0.04em;
     }
 
+    /* ── HTML preview ──────────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-html-preview {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre;
+      overflow: auto;
+      max-height: 150px;
+      margin: 6px 0 0;
+      padding: 6px 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+      color: #333;
+    }
+
     /* ── Issue topic override ───────────────────────────────────────────────── */
     #__fo_dialog__ .fo-topic-row {
       display: flex;
@@ -388,11 +404,21 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     <div class="fo-meta-key">${escapeHtml(k)}</div>
     <div class="fo-meta-val">${escapeHtml(v)}</div>`).join("");
 
+  const outerHTML = ctx["outerHTML"] as string | undefined;
+
   dialog.innerHTML = `
     <div class="fo-card">
       <div class="fo-header">
         <h2>${title}</h2>
-        <div class="fo-selector">${escapeHtml(opts.selector)}</div>
+        <details class="fo-meta-toggle">
+          <summary>Context that will be attached</summary>
+          <div class="fo-meta-grid">${metaHTML}</div>
+        </details>
+        ${outerHTML ? `
+        <details class="fo-meta-toggle">
+          <summary>Element HTML</summary>
+          <pre class="fo-html-preview">${escapeHtml(outerHTML)}</pre>
+        </details>` : ""}
       </div>
       ${commentsHTML}
       <div class="fo-compose">
@@ -411,10 +437,6 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <input type="radio" name="__fo_type__" id="__fo_type_enh__" value="enhancement" checked>
           <label for="__fo_type_enh__">✨ Enhancement</label>
         </div>
-        <details class="fo-meta-toggle">
-          <summary>Context that will be attached</summary>
-          <div class="fo-meta-grid">${metaHTML}</div>
-        </details>
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">

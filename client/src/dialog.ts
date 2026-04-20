@@ -400,6 +400,10 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <img src="${escapeHtml(opts.user.avatarUrl)}" alt="">
           <span>${escapeHtml(opts.user.login)}</span>
         </div>
+        <div class="fo-topic-row">
+          <label class="fo-topic-label" for="__fo_topic__">Issue title</label>
+          <input class="fo-topic-input" id="__fo_topic__" type="text" value="${escapeHtml(opts.defaultIssueTopic)}">
+        </div>
         <textarea id="__fo_comment__" placeholder="Add a comment…"></textarea>
         <div class="fo-type-toggle">
           <input type="radio" name="__fo_type__" id="__fo_type_bug__" value="bug">
@@ -433,26 +437,9 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     return (checked?.value ?? "enhancement") as FeedbackType;
   };
 
-  // Inject the topic input lazily when "Send to GitHub" is clicked the first time,
-  // showing it expanded above the footer so the user can review/edit before confirming.
-  let topicInjected = false;
-  const injectTopicInput = () => {
-    if (topicInjected) return;
-    topicInjected = true;
-    const topicRow = document.createElement("div");
-    topicRow.className = "fo-topic-row";
-    topicRow.innerHTML = `
-      <label class="fo-topic-label" for="__fo_topic__">Issue title</label>
-      <input class="fo-topic-input" id="__fo_topic__" type="text" value="${escapeHtml(opts.defaultIssueTopic)}">
-    `;
-    // Insert between compose area and footer.
-    const footer = dialog.querySelector(".fo-footer")!;
-    dialog.querySelector(".fo-card")!.insertBefore(topicRow, footer);
-  };
-
   const getIssueTopic = (): string => {
     const input = dialog.querySelector<HTMLInputElement>("#__fo_topic__");
-    return (input?.value.trim() || opts.defaultIssueTopic);
+    return input?.value.trim() || opts.defaultIssueTopic;
   };
 
   textarea.focus();
@@ -479,13 +466,6 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   });
 
   exportBtn.addEventListener("click", async () => {
-    // First click: show the topic input and let user review, change button to confirm.
-    if (!topicInjected) {
-      injectTopicInput();
-      exportBtn.textContent = "Confirm & Send";
-      return;
-    }
-
     exportBtn.disabled = true;
     exportBtn.textContent = "Exporting…";
     submitBtn.disabled = true;
@@ -503,7 +483,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
       if (ids.length === 0) {
         errDiv.textContent = "Nothing to export — add a comment first.";
         exportBtn.disabled = false;
-        exportBtn.textContent = "Confirm & Send";
+        exportBtn.textContent = "Send to GitHub";
         submitBtn.disabled = false;
         return;
       }
@@ -512,7 +492,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     } catch (err) {
       errDiv.textContent = String(err);
       exportBtn.disabled = false;
-      exportBtn.textContent = "Confirm & Send";
+      exportBtn.textContent = "Send to GitHub";
       submitBtn.disabled = false;
     }
   });

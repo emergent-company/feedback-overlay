@@ -143,6 +143,11 @@ jobs:
             | base64 -w0 \
             | ssh feedback-server 'base64 -d > /opt/stacks/feedback-overlay/gh-app.pem && chmod 600 /opt/stacks/feedback-overlay/gh-app.pem'
 
+      - name: Verify PEM on server
+        run: |
+          echo "--- Checking PEM file ---"
+          ssh feedback-server 'wc -l /opt/stacks/feedback-overlay/gh-app.pem && head -1 /opt/stacks/feedback-overlay/gh-app.pem && tail -1 /opt/stacks/feedback-overlay/gh-app.pem'
+
       - name: Pull and restart
         run: |
           ssh feedback-server "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin"
@@ -175,8 +180,10 @@ jobs:
       - name: Dump container logs on failure
         if: failure()
         run: |
+          echo "--- Container status ---"
+          ssh feedback-server "docker ps -a --format 'table {{.Names}}\t{{.Status}}'" || true
           echo "--- Container logs ---"
-          ssh feedback-server "docker logs feedback-overlay --tail 100 2>&1" || true
+          ssh feedback-server "docker logs feedback-overlay-feedback-overlay-1 --tail 100 2>&1" || true
 
       - name: Rollback to previous image
         if: failure() && steps.health.outputs.rollback == 'true'

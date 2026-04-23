@@ -368,10 +368,10 @@
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
-        <button class="fo-btn-export" id="__fo_export__">Send to GitHub</button>
+        <button class="fo-btn-secondary" id="__fo_submit__">Save</button>
         <div class="fo-footer-spacer"></div>
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>
-        <button class="fo-btn-primary" id="__fo_submit__">Submit</button>
+        <button class="fo-btn-primary" id="__fo_export__">Send to GitHub</button>
       </div>
     </div>
   `;let r=e.querySelector("#__fo_comment__"),i=e.querySelector("#__fo_submit__"),d=e.querySelector("#__fo_cancel__"),_=e.querySelector("#__fo_export__"),p=e.querySelector("#__fo_err__"),h=()=>e.querySelector("input[name='__fo_type__']:checked")?.value??"enhancement",I=()=>e.querySelector("#__fo_topic__")?.value.trim()||t.defaultIssueTopic;r.focus(),d.addEventListener("click",()=>{w(),t.onCancel()}),i.addEventListener("click",async()=>{let u=r.value.trim();if(!u){p.textContent="Please enter a comment.";return}i.disabled=!0,i.textContent="Submitting\u2026",p.textContent="";try{await t.onSubmit(u,h()),w()}catch(b){p.textContent=String(b),i.disabled=!1,i.textContent="Submit"}}),_.addEventListener("click",async()=>{_.disabled=!0,_.textContent="Exporting\u2026",i.disabled=!0,p.textContent="";try{let u=r.value.trim(),b=h(),L=I(),k=[...a];if(u){let A=await t.onSubmit(u,b);k=[...k,A]}if(k.length===0){p.textContent="Nothing to export \u2014 add a comment first.",_.disabled=!1,_.textContent="Send to GitHub",i.disabled=!1;return}await t.onExport(k,b,L),w()}catch(u){p.textContent=String(u),_.disabled=!1,_.textContent="Send to GitHub",i.disabled=!1}}),e.addEventListener("click",u=>{u.target===e&&(w(),t.onCancel())});let $=u=>{u.key==="Escape"&&(w(),t.onCancel(),document.removeEventListener("keydown",$))};document.addEventListener("keydown",$)}function fe(t){le();let e=ce();e.innerHTML=`

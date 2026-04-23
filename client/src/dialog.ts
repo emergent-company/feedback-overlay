@@ -456,10 +456,10 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         <div class="fo-error" id="__fo_err__"></div>
       </div>
       <div class="fo-footer">
-        <button class="fo-btn-export" id="__fo_export__">Send to GitHub</button>
+        <button class="fo-btn-secondary" id="__fo_submit__">Save</button>
         <div class="fo-footer-spacer"></div>
         <button class="fo-btn-secondary" id="__fo_cancel__">Cancel</button>
-        <button class="fo-btn-primary" id="__fo_submit__">Submit</button>
+        <button class="fo-btn-primary" id="__fo_export__">Send to GitHub</button>
       </div>
     </div>
   `;

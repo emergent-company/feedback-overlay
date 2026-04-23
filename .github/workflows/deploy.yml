@@ -140,7 +140,8 @@ jobs:
             "TRAEFIK_HOST=${{ secrets.TRAEFIK_HOST }}" \
             | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
           printf '%s' '${{ secrets.GH_APP_PRIVATE_KEY }}' \
-            | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/gh-app.pem && chmod 600 /opt/stacks/feedback-overlay/gh-app.pem'
+            | base64 -w0 \
+            | ssh feedback-server 'base64 -d > /opt/stacks/feedback-overlay/gh-app.pem && chmod 600 /opt/stacks/feedback-overlay/gh-app.pem'
 
       - name: Pull and restart
         run: |
@@ -170,6 +171,12 @@ jobs:
           echo "::error::Health check timed out after ${TIMEOUT}s"
           echo "rollback=true" >> "$GITHUB_OUTPUT"
           exit 1
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "--- Container logs ---"
+          ssh feedback-server "docker logs feedback-overlay --tail 100 2>&1" || true
 
       - name: Rollback to previous image
         if: failure() && steps.health.outputs.rollback == 'true'

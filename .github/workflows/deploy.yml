@@ -141,7 +141,7 @@ jobs:
             | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
           printf '%s' '${{ secrets.GH_APP_PRIVATE_KEY }}' \
             | base64 -w0 \
-            | ssh feedback-server 'base64 -d > /opt/stacks/feedback-overlay/gh-app.pem && chmod 600 /opt/stacks/feedback-overlay/gh-app.pem'
+            | ssh feedback-server 'base64 -d > /opt/stacks/feedback-overlay/gh-app.pem && chmod 644 /opt/stacks/feedback-overlay/gh-app.pem'
 
       - name: Verify PEM on server
         run: |

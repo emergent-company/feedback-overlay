@@ -1,6 +1,6 @@
 # feedback-overlay
 
-A lightweight, drop-in feedback tool for any web app. Users hold `Alt+Shift` to enter element-selection mode, click any element to leave a comment, and export feedback directly to GitHub Issues — with full CSS context, computed styles, and element HTML attached automatically.
+A lightweight, drop-in feedback tool for any web app. Users hold `Alt+Shift` (configurable) to enter element-selection mode, click any element to leave a comment, and export feedback directly to GitHub Issues — with full CSS context, computed styles, and element HTML attached automatically.
 
 ---
 
@@ -38,6 +38,7 @@ Add the following snippet to your HTML, just before `</body>`:
 | `data-api` | No | API base URL. Defaults to `https://feedback.emergent-company.ai` |
 | `data-repo` | Yes | GitHub repo to create issues in (e.g. `acme/my-app`) |
 | `data-label` | No | Base label applied to all issues. Defaults to `feedback` |
+| `data-hotkey` | No | Activation key combo. Defaults to `alt+shift`. Options: `alt+shift`, `ctrl+shift`, `meta+shift` |
 
 ### 2. Ensure GitHub labels exist
 
@@ -59,18 +60,33 @@ No build step, no npm install, no configuration file. The script self-initialise
 
 | Action | Result |
 |--------|--------|
-| Hold `Alt+Shift` | Enter element-selection mode (crosshair cursor + blue highlights) |
+| Hold `Alt+Shift` (or configured hotkey) | Enter element-selection mode (crosshair cursor + highlights) |
 | Hover an element | Tooltip shows element tag (or `data-component` name if set) |
 | Click an element | Opens the feedback dialog |
-| Release `Alt+Shift` | Exits selection mode (dialog stays open if already clicked) |
+| Release hotkey | Exits selection mode (dialog stays open if already clicked) |
 
 ### Feedback dialog
 
 1. Existing comments for that element are shown at the top (scrollable)
 2. Type a new comment in the textarea
 3. Select **Bug** or **Enhancement**
-4. **Submit** — saves the comment without creating a GitHub issue
+4. **Save** — saves the comment without creating a GitHub issue
 5. **Send to GitHub** — submits the comment (if any) and creates a GitHub issue with full context
+
+### Configuring the activation hotkey
+
+If `Alt+Shift` conflicts with another tool, override it via `data-hotkey`:
+
+```html
+<script
+  src="https://feedback.emergent-company.ai/feedback-overlay.js"
+  data-repo="your-org/your-repo"
+  data-hotkey="ctrl+shift"
+  async
+></script>
+```
+
+Supported values: `alt+shift` (default), `ctrl+shift`, `meta+shift`.
 
 ### `data-component` attribute
 
@@ -252,7 +268,7 @@ docker build -t feedback-overlay .
 This project uses [Semantic Versioning](https://semver.org). The current version is stored in the `VERSION` file at the repo root and is embedded into the Docker image at build time. The `/health` endpoint reports the running version and commit SHA:
 
 ```json
-{"ok": true, "version": "0.2.0", "commit": "ff46ac7"}
+{"ok": true, "version": "0.3.1", "commit": "ff46ac7"}
 ```
 
 Releases are tagged in Git (`v0.2.0`) and published as GitHub Releases with a corresponding Docker image tag on GHCR (`ghcr.io/emergent-company/feedback-overlay:v0.2.0`).

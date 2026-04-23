@@ -19,7 +19,7 @@ import { buildSelector } from "./selector";
 
   api.setOnUnauthorized(() => auth.logout());
 
-  startActivationListener();
+  startActivationListener(config);
 
   // ── Mode transitions ────────────────────────────────────────────────────────
   onModeChange(async (mode) => {

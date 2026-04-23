@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
-	"github.com/emergent-company/feedback-overlay/server/middleware"
 	"github.com/emergent-company/feedback-overlay/server/store"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/net/html"
@@ -52,12 +51,22 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 		labels = []string{items[0].Label}
 	}
 
-	title, body := buildIssueContent(items, middleware.GetLogin(c))
+	login := ""
+	if v, ok := c.Get("github_login").(string); ok {
+		login = v
+	}
+	title, body := buildIssueContent(items, login)
 	if req.Title != "" {
 		title = req.Title
 	}
 
-	result, err := github.CreateIssue(ctx, middleware.GetGitHubToken(c), github.CreateIssueParams{
+	// Use a server-side GitHub App installation token — not subject to org OAuth restrictions.
+	installToken, err := h.GHConfig.InstallationToken(ctx)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get installation token: "+err.Error())
+	}
+
+	result, err := github.CreateIssue(ctx, installToken, github.CreateIssueParams{
 		Repo:   req.Repo,
 		Title:  title,
 		Body:   body,

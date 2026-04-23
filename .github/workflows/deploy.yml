@@ -129,13 +129,18 @@ jobs:
             "VERSION=${{ steps.tag.outputs.tag }}" \
             "PORT=8080" \
             "DB_PATH=/data/feedback-overlay.db" \
-            "GITHUB_CLIENT_ID=${{ secrets.FEEDBACK_GITHUB_CLIENT_ID }}" \
-            "GITHUB_CLIENT_SECRET=${{ secrets.FEEDBACK_GITHUB_CLIENT_SECRET }}" \
-            "GITHUB_REDIRECT_URI=https://feedback.emergent-company.ai/auth/callback" \
+            "GH_APP_ID=${{ secrets.GH_APP_ID }}" \
+            "GH_APP_CLIENT_ID=${{ secrets.GH_APP_CLIENT_ID }}" \
+            "GH_APP_CLIENT_SECRET=${{ secrets.GH_APP_CLIENT_SECRET }}" \
+            "GH_REDIRECT_URI=https://feedback.emergent-company.ai/auth/callback" \
+            "GH_INSTALLATION_ID=${{ secrets.GH_INSTALLATION_ID }}" \
+            "GH_APP_PRIVATE_KEY_PATH=/run/secrets/gh-app.pem" \
             "JWT_SECRET=${{ secrets.FEEDBACK_JWT_SECRET }}" \
             "ALLOWED_ORIGINS=${{ secrets.FEEDBACK_ALLOWED_ORIGINS }}" \
             "TRAEFIK_HOST=${{ secrets.TRAEFIK_HOST }}" \
             | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
+          printf '%s' '${{ secrets.GH_APP_PRIVATE_KEY }}' \
+            | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/gh-app.pem && chmod 600 /opt/stacks/feedback-overlay/gh-app.pem'
 
       - name: Pull and restart
         run: |

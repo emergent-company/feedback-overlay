@@ -20,6 +20,7 @@ services:
       - "3014:8080"
     volumes:
       - feedback-data:/data
+      - /opt/stacks/feedback-overlay/gh-app.pem:/run/secrets/gh-app.pem:ro
     env_file:
       - .env
     # Route public hostnames to the internal reverse proxy.

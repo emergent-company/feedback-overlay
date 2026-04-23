@@ -26,12 +26,27 @@ var (
 
 func main() {
 	// ── Configuration from environment variables ──────────────────────────────
-	port := envOr("PORT", "8080")
-	dbPath := envOr("DB_PATH", "/data/feedback-overlay.db")
-	jwtSecret := mustEnv("JWT_SECRET")
-	ghClientID := mustEnv("GITHUB_CLIENT_ID")
-	ghClientSecret := mustEnv("GITHUB_CLIENT_SECRET")
-	ghRedirectURI := mustEnv("GITHUB_REDIRECT_URI")
+	port           := envOr("PORT", "8080")
+	dbPath         := envOr("DB_PATH", "/data/feedback-overlay.db")
+	jwtSecret      := mustEnv("JWT_SECRET")
+	ghAppID        := mustEnv("GH_APP_ID")
+	ghClientID     := mustEnv("GH_APP_CLIENT_ID")
+	ghClientSecret := mustEnv("GH_APP_CLIENT_SECRET")
+	ghRedirectURI  := mustEnv("GH_REDIRECT_URI")
+	ghInstallID    := mustEnv("GH_INSTALLATION_ID")
+
+	// Private key: prefer file path, fall back to inline PEM env var.
+	var ghPrivateKey string
+	if keyPath := os.Getenv("GH_APP_PRIVATE_KEY_PATH"); keyPath != "" {
+		data, err := os.ReadFile(keyPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fatal: read GH_APP_PRIVATE_KEY_PATH: %v\n", err)
+			os.Exit(1)
+		}
+		ghPrivateKey = string(data)
+	} else {
+		ghPrivateKey = mustEnv("GH_APP_PRIVATE_KEY")
+	}
 	allowedOrigins := envOr("ALLOWED_ORIGINS", "*")
 
 	// ── SQLite store ──────────────────────────────────────────────────────────
@@ -42,11 +57,14 @@ func main() {
 	}
 	defer s.Close()
 
-	// ── GitHub OAuth config ───────────────────────────────────────────────────
-	ghCfg := &github.Config{
-		ClientID:     ghClientID,
-		ClientSecret: ghClientSecret,
-		RedirectURI:  ghRedirectURI,
+	// ── GitHub App config ─────────────────────────────────────────────────────
+	ghCfg := &github.AppConfig{
+		AppID:          ghAppID,
+		ClientID:       ghClientID,
+		ClientSecret:   ghClientSecret,
+		RedirectURI:    ghRedirectURI,
+		PrivateKeyPEM:  ghPrivateKey,
+		InstallationID: ghInstallID,
 	}
 
 	// ── Echo server ───────────────────────────────────────────────────────────
@@ -55,11 +73,7 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// CORS — reflect any Origin back so the overlay works from any domain
-	// without infrastructure changes. The feedback-overlay.js is a read-only
-	// script tag; the only sensitive operations require a valid JWT, so
-	// reflecting any origin is safe.
-	_ = allowedOrigins // no longer used — keeping env var for compat
+	_ = allowedOrigins
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			origin := c.Request().Header.Get("Origin")
@@ -100,8 +114,8 @@ func main() {
 	})
 
 	// Feedback — public read endpoints
-	e.GET("/feedback", h.HandleListFeedback)           // badge counts
-	e.GET("/feedback/list", h.HandleListFeedbackByURL) // full comment details for sidebar
+	e.GET("/feedback", h.HandleListFeedback)
+	e.GET("/feedback/list", h.HandleListFeedbackByURL)
 
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))

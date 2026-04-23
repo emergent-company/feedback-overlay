@@ -9,23 +9,21 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-const UserContextKey = "github_user"
 const UserLoginKey = "github_login"
-const UserTokenKey = "github_token"
 
 // Claims are the JWT claims stored in the session token.
+// The GitHub token is no longer stored here — issue creation uses a
+// server-side GitHub App installation token instead.
 type Claims struct {
-	GitHubLogin  string `json:"login"`
-	GitHubToken  string `json:"gh_token"` // OAuth access token (encrypted in production)
-	AvatarURL    string `json:"avatar_url"`
+	GitHubLogin string `json:"login"`
+	AvatarURL   string `json:"avatar_url"`
 	jwt.RegisteredClaims
 }
 
 // IssueToken creates a signed JWT for the given GitHub user.
-func IssueToken(secret, login, avatarURL, ghToken string) (string, error) {
+func IssueToken(secret, login, avatarURL string) (string, error) {
 	claims := Claims{
 		GitHubLogin: login,
-		GitHubToken: ghToken,
 		AvatarURL:   avatarURL,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
@@ -69,7 +67,6 @@ func RequireAuth(jwtSecret string) echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired token")
 			}
 			c.Set(UserLoginKey, claims.GitHubLogin)
-			c.Set(UserTokenKey, claims.GitHubToken)
 			c.Set("avatar_url", claims.AvatarURL)
 			return next(c)
 		}
@@ -79,11 +76,5 @@ func RequireAuth(jwtSecret string) echo.MiddlewareFunc {
 // GetLogin extracts the GitHub login from an Echo context (set by RequireAuth).
 func GetLogin(c echo.Context) string {
 	v, _ := c.Get(UserLoginKey).(string)
-	return v
-}
-
-// GetGitHubToken extracts the GitHub OAuth token from an Echo context.
-func GetGitHubToken(c echo.Context) string {
-	v, _ := c.Get(UserTokenKey).(string)
 	return v
 }

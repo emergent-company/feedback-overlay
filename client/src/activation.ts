@@ -1,4 +1,4 @@
-// activation.ts — configurable hold-to-activate key detection and overlay mode state machine.
+// activation.ts — configurable toggle-to-activate key detection and overlay mode state machine.
 
 import type { OverlayConfig } from "./config";
 
@@ -9,12 +9,15 @@ type ModeChangeCallback = (mode: OverlayMode) => void;
 let mode: OverlayMode = "idle";
 let listeners: ModeChangeCallback[] = [];
 
-// Which modifier keys must both be held to activate.
+// Which modifier keys must both be pressed to toggle the overlay.
 let modifierA = "Alt";   // primary (e.g. Alt, Control, Meta)
 let modifierB = "Shift"; // always Shift
 
+// Track individual key state so we can detect when both are pressed simultaneously.
 let modADown = false;
 let modBDown = false;
+// Prevent the combo from firing multiple times while keys are held.
+let comboFired = false;
 
 function setMode(next: OverlayMode): void {
   if (mode === next) return;
@@ -37,7 +40,7 @@ export function forceMode(next: OverlayMode): void {
   setMode(next);
 }
 
-/** Starts listening for the configured hotkey combo. */
+/** Starts listening for the configured hotkey combo (toggle behaviour). */
 export function startActivationListener(config: Pick<OverlayConfig, "hotkey">): void {
   switch (config.hotkey) {
     case "ctrl+shift":  modifierA = "Control"; break;
@@ -47,8 +50,8 @@ export function startActivationListener(config: Pick<OverlayConfig, "hotkey">): 
   }
 
   window.addEventListener("keydown", handleKeyDown, true);
-  window.addEventListener("keyup", handleKeyUp, true);
-  // Reset if window loses focus.
+  window.addEventListener("keyup",   handleKeyUp,   true);
+  // Reset key state if the window loses focus (don't leave users stuck).
   window.addEventListener("blur", reset);
 }
 
@@ -56,8 +59,16 @@ function handleKeyDown(e: KeyboardEvent): void {
   if (e.key === modifierA) modADown = true;
   if (e.key === modifierB) modBDown = true;
 
-  if (modADown && modBDown && mode === "idle") {
-    setMode("active");
+  if (modADown && modBDown && !comboFired) {
+    comboFired = true;
+    // Toggle: only switch between idle ↔ active.
+    // Pressing the combo while a dialog is open does nothing — the user must
+    // dismiss the dialog first (it will return to "active" or "idle" on its own).
+    if (mode === "idle") {
+      setMode("active");
+    } else if (mode === "active") {
+      setMode("idle");
+    }
   }
 }
 
@@ -65,17 +76,14 @@ function handleKeyUp(e: KeyboardEvent): void {
   if (e.key === modifierA) modADown = false;
   if (e.key === modifierB) modBDown = false;
 
-  // Only deactivate while in element-selection mode ("active").
-  // Once the user has clicked an element the mode advances to "capturing" or
-  // "commenting" and the dialog must stay open regardless of key state.
-  if (!modADown && !modBDown && mode === "active") {
-    setMode("idle");
-  }
+  // Allow the combo to fire again once at least one key has been released.
+  if (!modADown || !modBDown) comboFired = false;
 }
 
 function reset(): void {
   modADown = false;
   modBDown = false;
+  comboFired = false;
   // Only reset if the user hasn't already committed to a selection.
   if (mode === "active") setMode("idle");
 }

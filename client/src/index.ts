@@ -8,6 +8,7 @@ import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
 import { showSubmitDialog, showLoginDialog, closeDialog, type FeedbackType } from "./dialog";
 import { buildSelector } from "./selector";
+import { showIndicator, hideIndicator } from "./indicator";
 
 (function bootstrap() {
   if ((window as any).__feedbackOverlayLoaded) return;
@@ -24,8 +25,10 @@ import { buildSelector } from "./selector";
   // ── Mode transitions ────────────────────────────────────────────────────────
   onModeChange(async (mode) => {
     if (mode === "active") {
+      showIndicator(config.hotkey);
       activateOverlay();
     } else if (mode === "idle") {
+      hideIndicator();
       deactivateOverlay();
     }
   });

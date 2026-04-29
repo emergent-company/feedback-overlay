@@ -66,6 +66,8 @@ function hotkeyLabel(hotkey: OverlayConfig["hotkey"]): string {
 let styleEl: HTMLStyleElement | null = null;
 let barEl: HTMLElement | null = null;
 
+const BAR_HEIGHT = 32;
+
 export function showIndicator(hotkey: OverlayConfig["hotkey"]): void {
   if (!styleEl) {
     styleEl = document.createElement("style");
@@ -84,8 +86,20 @@ export function showIndicator(hotkey: OverlayConfig["hotkey"]): void {
     `<span class="fo-bar-dot"></span>` +
     `Comment mode\u2002—\u2002press\u00a0<span class="fo-bar-key">${label}</span>\u00a0to exit`;
   barEl.style.display = "flex";
+
+  // Shift page content down so the bar doesn't cover anything.
+  const current = parseInt(getComputedStyle(document.body).paddingTop, 10) || 0;
+  document.body.dataset.foPaddingBefore = String(current);
+  document.body.style.paddingTop = `${current + BAR_HEIGHT}px`;
 }
 
 export function hideIndicator(): void {
   if (barEl) barEl.style.display = "none";
+
+  // Restore the original padding-top.
+  const before = document.body.dataset.foPaddingBefore;
+  if (before !== undefined) {
+    document.body.style.paddingTop = before === "0" ? "" : `${before}px`;
+    delete document.body.dataset.foPaddingBefore;
+  }
 }

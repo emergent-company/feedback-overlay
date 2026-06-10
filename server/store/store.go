@@ -27,8 +27,23 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
-CREATE INDEX IF NOT EXISTS feedback_url_idx  ON feedback(url);
-CREATE INDEX IF NOT EXISTS feedback_repo_idx ON feedback(repo);
+CREATE TABLE IF NOT EXISTS github_issues (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_number INTEGER NOT NULL,
+  issue_url    TEXT    NOT NULL,
+  repo         TEXT    NOT NULL,
+  title        TEXT    NOT NULL,
+  page_url     TEXT    NOT NULL,
+  selector     TEXT    NOT NULL,
+  state        TEXT    NOT NULL DEFAULT 'open',
+  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  synced_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS feedback_url_idx       ON feedback(url);
+CREATE INDEX IF NOT EXISTS feedback_repo_idx      ON feedback(repo);
+CREATE INDEX IF NOT EXISTS github_issues_url_idx  ON github_issues(page_url);
+CREATE INDEX IF NOT EXISTS github_issues_repo_idx ON github_issues(repo);
 `
 
 // Store wraps the SQLite database connection.

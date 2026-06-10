@@ -1,6 +1,6 @@
-// badge.ts — numbered badge overlay showing existing comment counts.
+// badge.ts — numbered badge overlay showing existing comment counts and GitHub issues.
 
-import type { BadgeSummary } from "./api";
+import type { BadgeSummary, IssueBadge } from "./api";
 
 const BADGE_PREFIX = "__fo_badge__";
 let activeBadges: HTMLElement[] = [];
@@ -15,19 +15,23 @@ export function clearBadges(): void {
 }
 
 /**
- * Renders badges for all summaries that have a matching element on the page.
+ * Renders badges for all summaries and issues that have a matching element on the page.
  * Badges are absolutely positioned over the top-right corner of each element.
  */
-export function renderBadges(summaries: BadgeSummary[], onBadgeClick: (ids: number[], selector: string) => void): void {
+export function renderBadges(
+  summaries: BadgeSummary[],
+  onBadgeClick: (ids: number[], selector: string) => void,
+  issues: IssueBadge[] = [],
+): void {
   clearBadges();
 
+  // Track all (badge, selector) pairs for repositioning.
+  const allBadges: { badge: HTMLElement; selector: string }[] = [];
+
+  // ── Feedback badges (amber) ────────────────────────────────────────────────
   summaries.forEach((s, i) => {
     let el: Element | null = null;
-    try {
-      el = document.querySelector(s.selector);
-    } catch {
-      return; // Invalid selector — skip.
-    }
+    try { el = document.querySelector(s.selector); } catch { return; }
     if (!el) return;
 
     const badge = document.createElement("div");
@@ -61,18 +65,63 @@ export function renderBadges(summaries: BadgeSummary[], onBadgeClick: (ids: numb
 
     document.body.appendChild(badge);
     activeBadges.push(badge);
+    allBadges.push({ badge, selector: s.selector });
+    positionBadge(badge, el, 0);
+  });
 
-    positionBadge(badge, el);
+  // ── Issue badges (blue) ────────────────────────────────────────────────────
+  issues.forEach((iss, i) => {
+    let el: Element | null = null;
+    try { el = document.querySelector(iss.selector); } catch { return; }
+    if (!el) return;
+
+    const badge = document.createElement("div");
+    badge.id = `${BADGE_PREFIX}issue_${i}`;
+    badge.textContent = `#${iss.issue_number}`;
+    badge.title = `GitHub issue #${iss.issue_number}: ${iss.title}`;
+
+    Object.assign(badge.style, {
+      position: "absolute",
+      background: "#1a7f37",
+      color: "#fff",
+      fontSize: "10px",
+      fontFamily: "sans-serif",
+      fontWeight: "bold",
+      lineHeight: "1",
+      padding: "2px 5px",
+      borderRadius: "10px",
+      zIndex: "2147483644",
+      cursor: "pointer",
+      userSelect: "none",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+      minWidth: "16px",
+      textAlign: "center",
+    });
+
+    badge.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      window.open(iss.issue_url, "_blank", "noopener");
+    });
+
+    document.body.appendChild(badge);
+    activeBadges.push(badge);
+    allBadges.push({ badge, selector: iss.selector });
+    // Offset vertically so issue badge doesn't overlap feedback badge on same element.
+    positionBadge(badge, el, summaries.some((s) => s.selector === iss.selector) ? 18 : 0);
   });
 
   // Reposition on scroll/resize.
   const reposition = () => {
-    activeBadges.forEach((badge, i) => {
-      const summary = summaries[i];
-      if (!summary) return;
+    // Rebuild mapping from current summaries + issues.
+    allBadges.forEach(({ badge, selector }) => {
       let el: Element | null = null;
-      try { el = document.querySelector(summary.selector); } catch { return; }
-      if (el) positionBadge(badge, el);
+      try { el = document.querySelector(selector); } catch { return; }
+      if (!el) return;
+      const isIssueBadge = badge.id.startsWith(`${BADGE_PREFIX}issue_`);
+      const hasOverlap = !isIssueBadge ? false :
+        summaries.some((s) => s.selector === selector);
+      positionBadge(badge, el, isIssueBadge && hasOverlap ? 18 : 0);
     });
   };
 
@@ -83,10 +132,10 @@ export function renderBadges(summaries: BadgeSummary[], onBadgeClick: (ids: numb
   resizeObserver.observe(document.body);
 }
 
-function positionBadge(badge: HTMLElement, el: Element): void {
+function positionBadge(badge: HTMLElement, el: Element, offsetY = 0): void {
   const rect = el.getBoundingClientRect();
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
-  badge.style.top = `${rect.top + scrollY - 8}px`;
+  badge.style.top = `${rect.top + scrollY - 8 + offsetY}px`;
   badge.style.left = `${rect.right + scrollX - 8}px`;
 }

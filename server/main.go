@@ -116,6 +116,7 @@ func main() {
 	// Feedback — public read endpoints
 	e.GET("/feedback", h.HandleListFeedback)
 	e.GET("/feedback/list", h.HandleListFeedbackByURL)
+	e.GET("/issues", h.HandleListIssues)
 
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))

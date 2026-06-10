@@ -7,6 +7,7 @@ import { startActivationListener, onModeChange, forceMode, getMode } from "./act
 import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
 import { showSubmitDialog, showLoginDialog, closeDialog, showToast, type FeedbackType } from "./dialog";
+import type { IssueBadge } from "./api";
 import { buildSelector } from "./selector";
 import { showIndicator, hideIndicator } from "./indicator";
 
@@ -40,11 +41,16 @@ import { showIndicator, hideIndicator } from "./indicator";
     document.body.style.cursor = "crosshair";
     document.addEventListener("mouseover", onMouseOver, true);
     document.addEventListener("click", onElementClick, true);
+    refreshBadges();
+  }
 
-    // Render badges for existing comments.
-    api.listBadges(window.location.href)
-      .then((summaries) => renderBadges(summaries, onBadgeClick))
-      .catch(() => {});
+  async function refreshBadges(): Promise<void> {
+    const url = window.location.href;
+    const [summaries, issues] = await Promise.all([
+      api.listBadges(url).catch((): never[] => []),
+      api.listIssueBadges(url).catch((): IssueBadge[] => []),
+    ]);
+    renderBadges(summaries, onBadgeClick, issues);
   }
 
   function deactivateOverlay(): void {
@@ -140,8 +146,7 @@ import { showIndicator, hideIndicator } from "./indicator";
           feedbackType: type,
         });
         // Refresh badges, return to active mode.
-        const summaries = await api.listBadges(window.location.href).catch(() => []);
-        renderBadges(summaries, onBadgeClick);
+        await refreshBadges();
         forceMode("active");
         return result.id;
       },
@@ -154,8 +159,7 @@ import { showIndicator, hideIndicator } from "./indicator";
         });
         showToast("Issue created successfully!");
         // Refresh badges after export.
-        const summaries = await api.listBadges(window.location.href).catch(() => []);
-        renderBadges(summaries, onBadgeClick);
+        await refreshBadges();
         forceMode("active");
       },
       onCancel: () => {

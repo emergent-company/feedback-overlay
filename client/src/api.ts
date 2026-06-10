@@ -16,6 +16,13 @@ export interface BadgeSummary {
   ids: number[];
 }
 
+export interface IssueBadge {
+  selector: string;
+  issue_number: number;
+  issue_url: string;
+  title: string;
+}
+
 export interface CreateFeedbackParams {
   url: string;
   selector: string;
@@ -106,6 +113,13 @@ export class APIClient {
   async listBadges(url: string): Promise<BadgeSummary[]> {
     return this.fetchJSON<BadgeSummary[]>(
       `/feedback?url=${encodeURIComponent(url)}`
+    );
+  }
+
+  /** Returns open GitHub issues recorded for the given page URL. */
+  async listIssueBadges(url: string): Promise<IssueBadge[]> {
+    return this.fetchJSON<IssueBadge[]>(
+      `/issues?url=${encodeURIComponent(url)}`
     );
   }
 

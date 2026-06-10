@@ -78,8 +78,19 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 
 	// Mark items as exported.
 	if err := h.Store.MarkExported(ctx, req.IDs, result.HTMLURL); err != nil {
-		// Non-fatal — issue was created, just log the failure.
 		c.Logger().Errorf("mark exported: %v", err)
+	}
+
+	// Store the issue reference for badge display.
+	if err := h.Store.CreateGitHubIssue(ctx, store.GitHubIssue{
+		IssueNumber: int64(result.Number),
+		IssueURL:    result.HTMLURL,
+		Repo:        req.Repo,
+		Title:       title,
+		PageURL:     items[0].URL,
+		Selector:    items[0].Selector,
+	}); err != nil {
+		c.Logger().Errorf("store github issue: %v", err)
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -210,6 +221,37 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	sb.WriteString("</details>\n")
 
 	return title, sb.String()
+}
+
+// HandleListIssues handles GET /issues?url=<url>.
+// Returns open GitHub issues recorded for a page, for badge rendering.
+func (h *Handler) HandleListIssues(c echo.Context) error {
+	pageURL := c.QueryParam("url")
+	if pageURL == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "url query parameter is required")
+	}
+
+	issues, err := h.Store.ListOpenGitHubIssuesByURL(c.Request().Context(), pageURL)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list issues")
+	}
+
+	type issueBadge struct {
+		Selector    string `json:"selector"`
+		IssueNumber int64  `json:"issue_number"`
+		IssueURL    string `json:"issue_url"`
+		Title       string `json:"title"`
+	}
+	out := make([]issueBadge, 0, len(issues))
+	for _, gi := range issues {
+		out = append(out, issueBadge{
+			Selector:    gi.Selector,
+			IssueNumber: gi.IssueNumber,
+			IssueURL:    gi.IssueURL,
+			Title:       gi.Title,
+		})
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // selectorShort returns the last segment of a CSS selector for use in titles.

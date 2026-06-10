@@ -116,6 +116,13 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	}
 	sb.WriteString(fmt.Sprintf("**URL:** %s  \n", pageURL))
 
+	if branch, ok := ctx["branch"].(string); ok && branch != "" {
+		sb.WriteString(fmt.Sprintf("**Branch:** `%s`  \n", branch))
+	}
+	if appVersion, ok := ctx["appVersion"].(string); ok && appVersion != "" {
+		sb.WriteString(fmt.Sprintf("**Version:** `%s`  \n", appVersion))
+	}
+
 	if vp, ok := ctx["viewport"].(map[string]any); ok {
 		w, _ := vp["width"].(float64)
 		h, _ := vp["height"].(float64)

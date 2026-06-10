@@ -56,6 +56,11 @@ export function startActivationListener(config: Pick<OverlayConfig, "hotkey">): 
 }
 
 function handleKeyDown(e: KeyboardEvent): void {
+  if (e.key === "Escape" && (mode === "active" || mode === "capturing")) {
+    setMode("idle");
+    return;
+  }
+
   if (e.key === modifierA) modADown = true;
   if (e.key === modifierB) modBDown = true;
 

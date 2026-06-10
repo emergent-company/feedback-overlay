@@ -305,6 +305,32 @@ function injectStyles(): void {
       box-shadow: 0 0 0 3px rgba(79,134,247,0.12);
     }
 
+    /* ── Target info strip ─────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-target-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 18px 10px;
+      border-bottom: 1px solid #e8e8e8;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-target-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #444;
+      background: #f2f2f2;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    #__fo_dialog__ .fo-target-chip-label {
+      color: #999;
+      font-family: inherit;
+    }
+
     /* ── Login card ────────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-login-card {
       background: #fff;
@@ -352,6 +378,9 @@ export interface SubmitFeedbackOptions {
   context: Record<string, unknown>;
   user: { login: string; avatarUrl: string };
   defaultIssueTopic: string;
+  repo: string;
+  branch?: string;
+  appVersion?: string;
   onSubmit: (comment: string, type: FeedbackType) => Promise<number>; // returns new feedback ID
   onExport: (ids: number[], type: FeedbackType, issueTopic: string) => Promise<void>;
   onCancel: () => void;
@@ -381,6 +410,12 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const title = existing.length > 0
     ? `${existing.length} comment${existing.length !== 1 ? "s" : ""} on this element`
     : "Add feedback";
+
+  const chips: string[] = [];
+  if (opts.repo)       chips.push(`<span class="fo-target-chip"><span class="fo-target-chip-label">repo</span>${escapeHtml(opts.repo)}</span>`);
+  if (opts.branch)     chips.push(`<span class="fo-target-chip"><span class="fo-target-chip-label">branch</span>${escapeHtml(opts.branch)}</span>`);
+  if (opts.appVersion) chips.push(`<span class="fo-target-chip"><span class="fo-target-chip-label">version</span>${escapeHtml(opts.appVersion)}</span>`);
+  const targetStripHTML = chips.length > 0 ? `<div class="fo-target-strip">${chips.join("")}</div>` : "";
 
   // ── Build metadata rows ────────────────────────────────────────────────────
   const metaRows: [string, string][] = [];
@@ -440,6 +475,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <pre class="fo-html-preview">${highlightHTML(outerHTML)}</pre>
         </details>` : ""}
       </div>
+      ${targetStripHTML}
       ${commentsHTML}
       <div class="fo-compose">
         <div class="fo-topic-row">
@@ -525,8 +561,11 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         submitBtn.disabled = false;
         return;
       }
-      await opts.onExport(ids, type, topic);
+      // Close immediately — export happens in background.
       closeDialog();
+      opts.onExport(ids, type, topic).catch((err: unknown) => {
+        showToast(`Failed to create issue: ${String(err)}`);
+      });
     } catch (err) {
       errDiv.textContent = String(err);
       exportBtn.disabled = false;

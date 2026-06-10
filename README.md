@@ -39,6 +39,8 @@ Add the following snippet to your HTML, just before `</body>`:
 | `data-repo` | Yes | GitHub repo to create issues in (e.g. `acme/my-app`) |
 | `data-label` | No | Base label applied to all issues. Defaults to `feedback` |
 | `data-hotkey` | No | Activation key combo. Defaults to `alt+shift`. Options: `alt+shift`, `ctrl+shift`, `meta+shift` |
+| `data-branch` | No | Git branch being tested. Shown in dialog and included in issue body |
+| `data-version` | No | App version being tested. Shown in dialog and included in issue body |
 
 ### 2. Ensure GitHub labels exist
 

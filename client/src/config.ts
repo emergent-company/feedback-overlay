@@ -13,6 +13,10 @@ export interface OverlayConfig {
    * Set via data-hotkey on the <script> tag.
    */
   hotkey: "alt+shift" | "ctrl+shift" | "meta+shift";
+  /** Git branch being tested. Set via data-branch on the <script> tag. */
+  branch?: string;
+  /** App version being tested. Set via data-version on the <script> tag. */
+  version?: string;
 }
 
 function getScriptTag(): HTMLScriptElement | null {
@@ -43,5 +47,8 @@ export function readConfig(): OverlayConfig {
     console.warn("[feedback-overlay] data-repo is not set on the <script> tag.");
   }
 
-  return { apiBase, repo, label, hotkey };
+  const branch = tag?.dataset.branch?.trim() || undefined;
+  const version = tag?.dataset.version?.trim() || undefined;
+
+  return { apiBase, repo, label, hotkey, branch, version };
 }

@@ -23,6 +23,8 @@ Zero-config feedback overlay. One `<script>` tag adds element-level commenting +
 | `data-api` | No | API base URL (default: `https://feedback.emergent-company.ai`) |
 | `data-label` | No | Base label (default: `feedback`) |
 | `data-hotkey` | No | `alt+shift` (default), `ctrl+shift`, `meta+shift` |
+| `data-branch` | No | Git branch being tested — shown in dialog + issue body |
+| `data-version` | No | App version being tested — shown in dialog + issue body |
 
 ## Usage
 

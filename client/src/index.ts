@@ -109,6 +109,9 @@ import { showIndicator, hideIndicator } from "./indicator";
       context,
       user,
       defaultIssueTopic,
+      repo: config.repo,
+      branch: config.branch,
+      appVersion: config.version,
       onSubmit: async (comment, type: FeedbackType) => {
         const result = await api.createFeedback({
           url: window.location.href,
@@ -193,6 +196,8 @@ import { showIndicator, hideIndicator } from "./indicator";
       },
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
+      ...(config.branch  ? { branch: config.branch }   : {}),
+      ...(config.version ? { appVersion: config.version } : {}),
     };
   }
 

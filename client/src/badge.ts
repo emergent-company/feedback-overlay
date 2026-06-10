@@ -82,7 +82,7 @@ export function renderBadges(
 
     Object.assign(badge.style, {
       position: "absolute",
-      background: "#1a7f37",
+      background: "#c0392b",
       color: "#fff",
       fontSize: "10px",
       fontFamily: "sans-serif",

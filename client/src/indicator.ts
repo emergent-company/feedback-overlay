@@ -85,12 +85,15 @@ export function showIndicator(hotkey: OverlayConfig["hotkey"]): void {
   barEl.innerHTML =
     `<span class="fo-bar-dot"></span>` +
     `Comment mode\u2002—\u2002press\u00a0<span class="fo-bar-key">${label}</span>\u00a0to exit`;
-  barEl.style.display = "flex";
 
-  // Shift page content down so the bar doesn't cover anything.
-  const current = parseInt(getComputedStyle(document.body).paddingTop, 10) || 0;
-  document.body.dataset.foPaddingBefore = String(current);
-  document.body.style.paddingTop = `${current + BAR_HEIGHT}px`;
+  // Only adjust padding when actually showing the bar (not on re-entry while already visible).
+  if (barEl.style.display !== "flex") {
+    const current = parseInt(getComputedStyle(document.body).paddingTop, 10) || 0;
+    document.body.dataset.foPaddingBefore = String(current);
+    document.body.style.paddingTop = `${current + BAR_HEIGHT}px`;
+  }
+
+  barEl.style.display = "flex";
 }
 
 export function hideIndicator(): void {

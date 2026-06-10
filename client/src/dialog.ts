@@ -305,6 +305,38 @@ function injectStyles(): void {
       box-shadow: 0 0 0 3px rgba(79,134,247,0.12);
     }
 
+    /* ── Component picker ──────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-component-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-bottom: 1px solid #e8e8e8;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-component-label {
+      font-size: 11px;
+      color: #999;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #__fo_dialog__ .fo-component-select {
+      flex: 1;
+      font-size: 12px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: #111;
+      background: #f7f7f7;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 3px 6px;
+      outline: none;
+      cursor: pointer;
+    }
+    #__fo_dialog__ .fo-component-select:focus {
+      border-color: #4f86f7;
+      background: #fff;
+    }
+
     /* ── Target info strip ─────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-target-strip {
       display: flex;
@@ -381,6 +413,9 @@ export interface SubmitFeedbackOptions {
   repo: string;
   branch?: string;
   appVersion?: string;
+  componentHierarchy?: { name: string; isChild: boolean }[];
+  selectedComponentIdx?: number;
+  onComponentChange?: (index: number) => void;
   onSubmit: (comment: string, type: FeedbackType) => Promise<number>; // returns new feedback ID
   onExport: (ids: number[], type: FeedbackType, issueTopic: string) => Promise<void>;
   onCancel: () => void;
@@ -416,6 +451,17 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   if (opts.branch)     chips.push(`<span class="fo-target-chip"><span class="fo-target-chip-label">branch</span>${escapeHtml(opts.branch)}</span>`);
   if (opts.appVersion) chips.push(`<span class="fo-target-chip"><span class="fo-target-chip-label">version</span>${escapeHtml(opts.appVersion)}</span>`);
   const targetStripHTML = chips.length > 0 ? `<div class="fo-target-strip">${chips.join("")}</div>` : "";
+
+  const hierarchy = opts.componentHierarchy ?? [];
+  const componentPickerHTML = hierarchy.length > 1 ? `
+    <div class="fo-component-row">
+      <span class="fo-component-label">Component</span>
+      <select class="fo-component-select" id="__fo_component__">
+        ${hierarchy.map((h, i) => `<option value="${i}" ${i === (opts.selectedComponentIdx ?? 0) ? "selected" : ""}>
+          ${h.isChild ? "↳ " : ""}${escapeHtml(h.name)}
+        </option>`).join("")}
+      </select>
+    </div>` : "";
 
   // ── Build metadata rows ────────────────────────────────────────────────────
   const metaRows: [string, string][] = [];
@@ -475,6 +521,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <pre class="fo-html-preview">${highlightHTML(outerHTML)}</pre>
         </details>` : ""}
       </div>
+      ${componentPickerHTML}
       ${targetStripHTML}
       ${commentsHTML}
       <div class="fo-compose">
@@ -505,6 +552,13 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
   const cancelBtn = dialog.querySelector<HTMLButtonElement>("#__fo_cancel__")!;
   const exportBtn = dialog.querySelector<HTMLButtonElement>("#__fo_export__")!;
   const errDiv = dialog.querySelector<HTMLElement>("#__fo_err__")!;
+
+  const componentSelect = dialog.querySelector<HTMLSelectElement>("#__fo_component__");
+  if (componentSelect && opts.onComponentChange) {
+    componentSelect.addEventListener("change", () => {
+      opts.onComponentChange!(parseInt(componentSelect.value, 10));
+    });
+  }
 
   const getType = (): FeedbackType => {
     const checked = dialog.querySelector<HTMLInputElement>("input[name='__fo_type__']:checked");

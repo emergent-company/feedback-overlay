@@ -72,6 +72,12 @@ import { showIndicator, hideIndicator } from "./indicator";
   async function openFeedbackDialog(target: Element): Promise<void> {
     const selector = buildSelector(target);
     const context = gatherContext(target);
+    const rawHierarchy = gatherComponentHierarchy(target);
+    // Innermost ancestor = current target; it's at ancestors.length-1 (last ancestor before children).
+    const ancestorCount = rawHierarchy.findIndex(
+      (h) => !target.closest("[data-component]") || h.element === target.closest("[data-component]")
+    );
+    const selectedComponentIdx = ancestorCount >= 0 ? ancestorCount : 0;
 
     forceMode("capturing");
     document.body.style.cursor = "";
@@ -114,6 +120,15 @@ import { showIndicator, hideIndicator } from "./indicator";
       repo: config.repo,
       branch: config.branch,
       appVersion: config.version,
+      componentHierarchy: rawHierarchy.map((h, i) => ({
+        name: h.name,
+        isChild: i > selectedComponentIdx,
+      })),
+      selectedComponentIdx,
+      onComponentChange: (idx) => {
+        closeDialog();
+        openFeedbackDialog(rawHierarchy[idx].element);
+      },
       onSubmit: async (comment, type: FeedbackType) => {
         const result = await api.createFeedback({
           url: window.location.href,
@@ -174,6 +189,33 @@ import { showIndicator, hideIndicator } from "./indicator";
     if (el) {
       openFeedbackDialog(el);
     }
+  }
+
+  // ── Component hierarchy ─────────────────────────────────────────────────────
+  // Returns ancestors (outermost→innermost) then direct data-component children.
+  function gatherComponentHierarchy(target: Element): { name: string; element: Element }[] {
+    const ancestors: { name: string; element: Element }[] = [];
+    let node: Element | null = target;
+    while (node && node !== document.documentElement) {
+      const val = node.getAttribute("data-component");
+      if (val) ancestors.push({ name: val, element: node });
+      node = node.parentElement;
+    }
+    ancestors.reverse(); // outermost first
+
+    const innermostEl = ancestors.length > 0 ? ancestors[ancestors.length - 1].element : null;
+    const children: { name: string; element: Element }[] = [];
+    if (innermostEl) {
+      innermostEl.querySelectorAll("[data-component]").forEach((child) => {
+        // Only direct component children (nearest data-component ancestor is innermostEl).
+        const nearestParent = child.parentElement?.closest("[data-component]");
+        if (nearestParent === innermostEl) {
+          children.push({ name: child.getAttribute("data-component")!, element: child });
+        }
+      });
+    }
+
+    return [...ancestors, ...children];
   }
 
   // ── Context collection ──────────────────────────────────────────────────────

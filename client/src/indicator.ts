@@ -26,6 +26,8 @@ const STYLES = `
   letter-spacing: 0.01em;
   pointer-events: none;
   box-sizing: border-box;
+  opacity: 1;
+  transition: opacity 1.2s ease;
 }
 #${BAR_ID} .fo-bar-dot {
   width: 7px;
@@ -65,6 +67,7 @@ function hotkeyLabel(hotkey: OverlayConfig["hotkey"]): string {
 
 let styleEl: HTMLStyleElement | null = null;
 let barEl: HTMLElement | null = null;
+let fadeTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function showIndicator(hotkey: OverlayConfig["hotkey"]): void {
   if (!styleEl) {
@@ -83,9 +86,25 @@ export function showIndicator(hotkey: OverlayConfig["hotkey"]): void {
   barEl.innerHTML =
     `<span class="fo-bar-dot"></span>` +
     `Comment mode\u2002—\u2002press\u00a0<span class="fo-bar-key">${label}</span>\u00a0to exit`;
+
+  // Reset opacity and show.
   barEl.style.display = "flex";
+  barEl.style.opacity = "1";
+
+  // Clear any pending fade.
+  if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+
+  // Fade out after 3 seconds.
+  fadeTimer = setTimeout(() => {
+    if (barEl) barEl.style.opacity = "0";
+    fadeTimer = null;
+  }, 3000);
 }
 
 export function hideIndicator(): void {
-  if (barEl) barEl.style.display = "none";
+  if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+  if (barEl) {
+    barEl.style.opacity = "0";
+    barEl.style.display = "none";
+  }
 }

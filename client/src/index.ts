@@ -6,7 +6,7 @@ import { AuthManager } from "./auth";
 import { startActivationListener, onModeChange, forceMode, getMode } from "./activation";
 import { highlight, clearHighlight } from "./highlighter";
 import { renderBadges, clearBadges } from "./badge";
-import { showSubmitDialog, showLoginDialog, closeDialog, type FeedbackType } from "./dialog";
+import { showSubmitDialog, showLoginDialog, closeDialog, showToast, type FeedbackType } from "./dialog";
 import { buildSelector } from "./selector";
 import { showIndicator, hideIndicator } from "./indicator";
 
@@ -132,7 +132,7 @@ import { showIndicator, hideIndicator } from "./indicator";
           labels: [config.label, type],
           title: issueTopic,
         });
-        window.open(result.issue_url, "_blank");
+        showToast("Issue created successfully!");
         // Refresh badges after export.
         const summaries = await api.listBadges(window.location.href).catch(() => []);
         renderBadges(summaries, onBadgeClick);

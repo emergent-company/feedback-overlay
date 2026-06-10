@@ -263,6 +263,18 @@ docker build -t feedback-overlay .
 
 ---
 
+## opencode AI skill
+
+This repo includes an [opencode](https://opencode.ai) AI skill for AI-assisted installation, configuration, and self-hosting:
+
+```
+.opencode/skills/feedback-overlay/SKILL.md
+```
+
+opencode auto-discovers project skills. No manual setup needed.
+
+---
+
 ## Versioning
 
 This project uses [Semantic Versioning](https://semver.org). The current version is stored in the `VERSION` file at the repo root and is embedded into the Docker image at build time. The `/health` endpoint reports the running version and commit SHA:

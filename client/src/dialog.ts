@@ -598,6 +598,54 @@ export function closeDialog(): void {
   if (dialog) dialog.remove();
 }
 
+const TOAST_ID = "__fo_toast__";
+
+function injectToastStyles(): void {
+  if (document.getElementById(TOAST_ID + "_styles")) return;
+  const style = document.createElement("style");
+  style.id = TOAST_ID + "_styles";
+  style.textContent = `
+    #${TOAST_ID} {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2147483647;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      max-width: 360px;
+    }
+    #${TOAST_ID}.fo-visible {
+      opacity: 1;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+export function showToast(message: string): void {
+  injectToastStyles();
+  let el = document.getElementById(TOAST_ID);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = TOAST_ID;
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.classList.add("fo-visible");
+  clearTimeout((el as any).__fo_toast_timer);
+  (el as any).__fo_toast_timer = setTimeout(() => {
+    el!.classList.remove("fo-visible");
+  }, 3000);
+}
+
 
 // ── HTML syntax highlighter ──────────────────────────────────────────────────
 // Tokenises raw HTML and returns a highlighted string safe to inject as

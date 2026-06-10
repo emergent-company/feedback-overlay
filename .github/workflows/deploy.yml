@@ -150,32 +150,28 @@ jobs:
 
       - name: Configure Traefik routing
         run: |
-          ssh feedback-server '
-            FILE=/opt/stacks/traefik/config/dynamic.yml
-            # Idempotent: only add if not already present
-            if ! grep -q "feedback.emergent-company.ai" "$FILE"; then
-              python3 - "$FILE" <<EOF
-import sys, yaml
-with open(sys.argv[1]) as f:
-    cfg = yaml.safe_load(f)
-cfg["http"]["routers"]["feedback"] = {
-    "entryPoints": ["websecure"],
-    "middlewares": ["security-headers"],
-    "rule": "Host(\`feedback.emergent-company.ai\`)",
-    "service": "feedback",
-    "tls": {"certResolver": "letsencrypt"},
-}
-cfg["http"]["services"]["feedback"] = {
-    "loadBalancer": {"servers": [{"url": "http://127.0.0.1:3014"}]}
-}
-with open(sys.argv[1], "w") as f:
-    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-EOF
-              echo "Traefik route added"
-            else
-              echo "Traefik route already present, skipping"
-            fi
-          '
+          cat > /tmp/patch_traefik.py << 'PYEOF'
+          import sys, yaml
+          f = sys.argv[1]
+          cfg = yaml.safe_load(open(f))
+          if "feedback" not in cfg["http"]["routers"]:
+              cfg["http"]["routers"]["feedback"] = {
+                  "entryPoints": ["websecure"],
+                  "middlewares": ["security-headers"],
+                  "rule": "Host(`feedback.emergent-company.ai`)",
+                  "service": "feedback",
+                  "tls": {"certResolver": "letsencrypt"},
+              }
+              cfg["http"]["services"]["feedback"] = {
+                  "loadBalancer": {"servers": [{"url": "http://127.0.0.1:3014"}]}
+              }
+              open(f, "w").write(yaml.dump(cfg, default_flow_style=False, allow_unicode=True))
+              print("Traefik route added")
+          else:
+              print("Traefik route already present, skipping")
+          PYEOF
+          scp /tmp/patch_traefik.py feedback-server:/tmp/patch_traefik.py
+          ssh feedback-server "python3 /tmp/patch_traefik.py /opt/stacks/traefik/config/dynamic.yml"
 
       - name: Pull and restart
         run: |

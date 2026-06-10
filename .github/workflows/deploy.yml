@@ -148,11 +148,6 @@ jobs:
           echo "--- Checking PEM file ---"
           ssh feedback-server 'wc -l /opt/stacks/feedback-overlay/gh-app.pem && head -1 /opt/stacks/feedback-overlay/gh-app.pem && tail -1 /opt/stacks/feedback-overlay/gh-app.pem'
 
-      - name: Find Traefik config (debug)
-        run: |
-          ssh feedback-server "find / -name 'dynamic.yml' -o -name 'dynamic.yaml' 2>/dev/null | grep -v proc || true"
-          ssh feedback-server "find / -name 'traefik.yml' -o -name 'traefik.yaml' 2>/dev/null | grep -v proc || true"
-
       - name: Pull and restart
         run: |
           ssh feedback-server "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin"

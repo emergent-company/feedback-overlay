@@ -151,8 +151,19 @@ jobs:
       - name: Configure Traefik routing
         run: |
           cat > /tmp/patch_traefik.py << 'PYEOF'
-          import sys, yaml
-          f = sys.argv[1]
+          import sys, yaml, glob, os
+          candidates = [
+              "/opt/stacks/traefik/config/dynamic.yml",
+              "/opt/stacks/traefik/dynamic.yml",
+          ] + glob.glob("/opt/stacks/traefik/**/*.yml", recursive=True) \
+            + glob.glob("/opt/traefik/**/*.yml", recursive=True)
+          f = next((p for p in candidates if os.path.exists(p) and "dynamic" in p), None)
+          if not f:
+              print("ERROR: could not find Traefik dynamic config. Candidates checked:")
+              for p in candidates:
+                  print(" ", p, "exists:", os.path.exists(p))
+              sys.exit(1)
+          print(f"Patching {f}")
           cfg = yaml.safe_load(open(f))
           if "feedback" not in cfg["http"]["routers"]:
               cfg["http"]["routers"]["feedback"] = {
@@ -171,7 +182,7 @@ jobs:
               print("Traefik route already present, skipping")
           PYEOF
           scp /tmp/patch_traefik.py feedback-server:/tmp/patch_traefik.py
-          ssh feedback-server "python3 /tmp/patch_traefik.py /opt/stacks/traefik/config/dynamic.yml"
+          ssh feedback-server "python3 /tmp/patch_traefik.py"
 
       - name: Pull and restart
         run: |

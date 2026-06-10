@@ -30,6 +30,8 @@ import { showIndicator, hideIndicator } from "./indicator";
     } else if (mode === "idle") {
       hideIndicator();
       deactivateOverlay();
+    } else if (mode === "capturing" || mode === "commenting") {
+      hideIndicator();
     }
   });
 

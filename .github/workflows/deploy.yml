@@ -148,6 +148,35 @@ jobs:
           echo "--- Checking PEM file ---"
           ssh feedback-server 'wc -l /opt/stacks/feedback-overlay/gh-app.pem && head -1 /opt/stacks/feedback-overlay/gh-app.pem && tail -1 /opt/stacks/feedback-overlay/gh-app.pem'
 
+      - name: Configure Traefik routing
+        run: |
+          ssh feedback-server '
+            FILE=/opt/stacks/traefik/config/dynamic.yml
+            # Idempotent: only add if not already present
+            if ! grep -q "feedback.emergent-company.ai" "$FILE"; then
+              python3 - "$FILE" <<EOF
+import sys, yaml
+with open(sys.argv[1]) as f:
+    cfg = yaml.safe_load(f)
+cfg["http"]["routers"]["feedback"] = {
+    "entryPoints": ["websecure"],
+    "middlewares": ["security-headers"],
+    "rule": "Host(\`feedback.emergent-company.ai\`)",
+    "service": "feedback",
+    "tls": {"certResolver": "letsencrypt"},
+}
+cfg["http"]["services"]["feedback"] = {
+    "loadBalancer": {"servers": [{"url": "http://127.0.0.1:3014"}]}
+}
+with open(sys.argv[1], "w") as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+EOF
+              echo "Traefik route added"
+            else
+              echo "Traefik route already present, skipping"
+            fi
+          '
+
       - name: Pull and restart
         run: |
           ssh feedback-server "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin"

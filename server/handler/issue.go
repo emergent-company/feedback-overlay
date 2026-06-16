@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
 	"github.com/emergent-company/feedback-overlay/server/store"
@@ -220,6 +222,25 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	sb.WriteString("\n```\n\n")
 	sb.WriteString("</details>\n")
 
+	// Session history (from client-side ring buffer).
+	if history, ok := ctx["sessionHistory"].([]any); ok && len(history) > 0 {
+		sb.WriteString("<details><summary>Session history</summary>\n\n")
+		sb.WriteString("| # | Time | Type | Detail |\n")
+		sb.WriteString("|---|------|------|--------|\n")
+		for i, raw := range history {
+			ev, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			evType, _ := ev["type"].(string)
+			evTime := formatEventTime(ev["timestamp"])
+			evData, _ := ev["data"].(map[string]any)
+			detail := formatEventDetail(evType, evData)
+			sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s |\n", i+1, evTime, evType, detail))
+		}
+		sb.WriteString("\n</details>\n")
+	}
+
 	return title, sb.String()
 }
 
@@ -262,6 +283,77 @@ func selectorShort(sel string) string {
 		return last[:57] + "…"
 	}
 	return last
+}
+
+// formatEventTime formats an event timestamp (ISO string) to HH:MM:SS.
+func formatEventTime(v any) string {
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		// Try without timezone.
+		t, err = time.Parse("2006-01-02T15:04:05", s[:19])
+		if err != nil {
+			return s
+		}
+	}
+	return t.Format("15:04:05")
+}
+
+// formatEventDetail returns a Markdown-safe single-line detail string for an event.
+func formatEventDetail(typ string, data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	switch typ {
+	case "navigation":
+		prev := shortenEventURL(data["previousUrl"])
+		url := shortenEventURL(data["url"])
+		return fmt.Sprintf("%s → %s", prev, url)
+	case "input":
+		tag, _ := data["tagName"].(string)
+		comp, _ := data["component"].(string)
+		val, _ := data["value"].(string)
+		if len(val) > 60 {
+			val = val[:57] + "..."
+		}
+		if comp != "" {
+			return fmt.Sprintf("`%s` [%s] = \"%s\"", tag, comp, val)
+		}
+		return fmt.Sprintf("`%s` = \"%s\"", tag, val)
+	case "click":
+		tag, _ := data["tagName"].(string)
+		comp, _ := data["component"].(string)
+		text, _ := data["text"].(string)
+		if comp != "" {
+			return fmt.Sprintf("`%s` [%s] \"%s\"", tag, comp, text)
+		}
+		return fmt.Sprintf("`%s` \"%s\"", tag, text)
+	default:
+		return ""
+	}
+}
+
+// shortenEventURL shortens a URL to path+query for display, or returns a placeholder.
+func shortenEventURL(v any) string {
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return "(initial page)"
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return s
+	}
+	out := u.Path
+	if u.RawQuery != "" {
+		out += "?" + u.RawQuery
+	}
+	if out == "" {
+		out = "/"
+	}
+	return out
 }
 
 // parseContext unmarshals a context JSON string into a map.

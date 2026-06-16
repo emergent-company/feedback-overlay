@@ -10,10 +10,13 @@ import { showSubmitDialog, showLoginDialog, closeDialog, showToast, type Feedbac
 import type { IssueBadge } from "./api";
 import { buildSelector } from "./selector";
 import { showIndicator, hideIndicator } from "./indicator";
+import { startRecording, getHistory } from "./history";
 
 (function bootstrap() {
   if ((window as any).__feedbackOverlayLoaded) return;
   (window as any).__feedbackOverlayLoaded = true;
+
+  startRecording();
 
   const config = readConfig();
   const api = new APIClient(config);
@@ -246,6 +249,7 @@ import { showIndicator, hideIndicator } from "./indicator";
       timestamp: new Date().toISOString(),
       ...(config.branch  ? { branch: config.branch }   : {}),
       ...(config.version ? { appVersion: config.version } : {}),
+      sessionHistory: getHistory(),
     };
   }
 

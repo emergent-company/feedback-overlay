@@ -255,6 +255,30 @@ function injectStyles(): void {
       letter-spacing: 0.04em;
     }
 
+    /* ── Session history ────────────────────────────────────────────────────── */
+    #__fo_dialog__ .fo-history-list {
+      margin-top: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #__fo_dialog__ .fo-history-line {
+      font-size: 11px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      line-height: 1.7;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #__fo_dialog__ .fo-history-type {
+      display: inline-block;
+      width: 36px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
     /* ── HTML preview ──────────────────────────────────────────────────────── */
     #__fo_dialog__ .fo-html-preview {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -520,6 +544,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
           <summary>Element HTML</summary>
           <pre class="fo-html-preview">${highlightHTML(outerHTML)}</pre>
         </details>` : ""}
+        ${buildSessionHistoryHTML(ctx)}
       </div>
       ${componentPickerHTML}
       ${targetStripHTML}
@@ -822,6 +847,67 @@ function highlightHTML(raw: string): string {
   }
 
   return out.join("").trimEnd();
+}
+
+// ── Session history ───────────────────────────────────────────────────────────
+function buildSessionHistoryHTML(ctx: Record<string, unknown>): string {
+  const raw = ctx["sessionHistory"];
+  if (!Array.isArray(raw) || raw.length === 0) return "";
+
+  const lines: string[] = [];
+  for (const ev of raw) {
+    const t = typeof ev === "object" && ev ? (ev as any) : null;
+    if (!t || !t.type || !t.data) continue;
+    const time = formatTime(t.timestamp);
+    switch (t.type) {
+      case "navigation": {
+        const prev = shortenURL(t.data.previousUrl);
+        const url = shortenURL(t.data.url);
+        lines.push(`<div class="fo-history-line"><span class="fo-history-type">nav</span> ${time} ${escapeHtml(prev)} → ${escapeHtml(url)}</div>`);
+        break;
+      }
+      case "input": {
+        const comp = t.data.component ? ` [${escapeHtml(t.data.component)}]` : "";
+        const val = String(t.data.value ?? "");
+        const valDisplay = val.length > 60 ? val.slice(0, 57) + "..." : val;
+        lines.push(`<div class="fo-history-line"><span class="fo-history-type">input</span> ${time} ${escapeHtml(String(t.data.tagName ?? ""))}${comp} = "${escapeHtml(valDisplay)}"</div>`);
+        break;
+      }
+      case "click": {
+        const comp = t.data.component ? ` [${escapeHtml(t.data.component)}]` : "";
+        const txt = t.data.text ? ` "${escapeHtml(String(t.data.text))}"` : "";
+        lines.push(`<div class="fo-history-line"><span class="fo-history-type">click</span> ${time} ${escapeHtml(String(t.data.tagName ?? ""))}${comp}${txt}</div>`);
+        break;
+      }
+    }
+  }
+
+  if (lines.length === 0) return "";
+
+  return `
+    <details class="fo-meta-toggle">
+      <summary>Session history (last ${lines.length} events)</summary>
+      <div class="fo-history-list">${lines.join("")}</div>
+    </details>`;
+}
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function shortenURL(url: string): string {
+  if (!url) return "(initial page)";
+  try {
+    const u = new URL(url);
+    return u.pathname + u.search + u.hash || "/";
+  } catch {
+    return url.length > 80 ? url.slice(0, 77) + "..." : url;
+  }
 }
 
 function escapeHtml(s: string): string {

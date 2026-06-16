@@ -17,5 +17,8 @@ data/
 .env.*
 !.env.example
 
+# Task
+.task/
+
 # OS
 .DS_Store

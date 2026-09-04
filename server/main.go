@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
 	"github.com/emergent-company/feedback-overlay/server/handler"
@@ -13,6 +15,7 @@ import (
 	"github.com/emergent-company/feedback-overlay/server/store"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 )
 
 //go:embed static/feedback-overlay.js
@@ -26,14 +29,14 @@ var (
 
 func main() {
 	// ── Configuration from environment variables ──────────────────────────────
-	port           := envOr("PORT", "8080")
-	dbPath         := envOr("DB_PATH", "/data/feedback-overlay.db")
-	jwtSecret      := mustEnv("JWT_SECRET")
-	ghAppID        := mustEnv("GH_APP_ID")
-	ghClientID     := mustEnv("GH_APP_CLIENT_ID")
+	port := envOr("PORT", "8080")
+	dbPath := envOr("DB_PATH", "/data/feedback-overlay.db")
+	jwtSecret := mustEnv("JWT_SECRET")
+	ghAppID := mustEnv("GH_APP_ID")
+	ghClientID := mustEnv("GH_APP_CLIENT_ID")
 	ghClientSecret := mustEnv("GH_APP_CLIENT_SECRET")
-	ghRedirectURI  := mustEnv("GH_REDIRECT_URI")
-	ghInstallID    := mustEnv("GH_INSTALLATION_ID")
+	ghRedirectURI := mustEnv("GH_REDIRECT_URI")
+	ghInstallID := mustEnv("GH_INSTALLATION_ID")
 
 	// Private key: prefer file path, fall back to inline PEM env var.
 	var ghPrivateKey string
@@ -72,12 +75,15 @@ func main() {
 	e.HideBanner = true
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.BodyLimit(envOr("MAX_BODY_BYTES", "10MB")))
 
-	_ = allowedOrigins
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			origin := c.Request().Header.Get("Origin")
 			if origin == "" {
+				return next(c)
+			}
+			if !originAllowed(origin, allowedOrigins) {
 				return next(c)
 			}
 			h := c.Response().Header()
@@ -113,18 +119,26 @@ func main() {
 		})
 	})
 
-	// Feedback — public read endpoints
+	// Feedback — public read endpoints (counts + public issue refs only, no PII)
 	e.GET("/feedback", h.HandleListFeedback)
-	e.GET("/feedback/list", h.HandleListFeedbackByURL)
 	e.GET("/issues", h.HandleListIssues)
 
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))
 	auth.GET("/me", h.HandleMe)
-	auth.POST("/feedback", h.HandleCreateFeedback)
+	auth.GET("/feedback/list", h.HandleListFeedbackByURL)
 	auth.GET("/feedback/:id", h.HandleGetFeedback)
 	auth.DELETE("/feedback/:id", h.HandleDeleteFeedback)
-	auth.POST("/issue/export", h.HandleExportIssue)
+
+	// Write endpoints are rate-limited per client IP to protect the SQLite DB and
+	// the upstream GitHub API from abuse. Export is stricter since it calls GitHub.
+	feedbackLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(
+		rate.Limit(envFloatOr("RATE_LIMIT_RPS", 10))))
+	exportLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(
+		rate.Limit(envFloatOr("EXPORT_RATE_LIMIT_RPS", 1))))
+
+	auth.POST("/feedback", h.HandleCreateFeedback, feedbackLimiter)
+	auth.POST("/issue/export", h.HandleExportIssue, exportLimiter)
 
 	// ── Start ─────────────────────────────────────────────────────────────────
 	fmt.Printf("feedback-overlay %s (%s) listening on :%s\n", Version, Commit, port)
@@ -132,6 +146,32 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// originAllowed reports whether the request Origin matches the ALLOWED_ORIGINS
+// allowlist. "*" (or an empty list) allows any origin.
+func originAllowed(origin, allowlist string) bool {
+	for _, allowed := range strings.Split(allowlist, ",") {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "*" {
+			return true
+		}
+		if allowed == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// envFloatOr reads a float environment variable, falling back to def when the
+// variable is empty or not parseable as a float.
+func envFloatOr(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return def
 }
 
 func envOr(key, def string) string {

@@ -195,9 +195,9 @@ func (s *Store) MarkExported(ctx context.Context, ids []int64, issueURL string) 
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
-	const q = `UPDATE feedback SET issue_url = ?, status = 'resolved' WHERE id = ?`
+	const q = `UPDATE feedback SET issue_url = ?, status = ? WHERE id = ?`
 	for _, id := range ids {
-		if _, err := tx.ExecContext(ctx, q, issueURL, id); err != nil {
+		if _, err := tx.ExecContext(ctx, q, issueURL, StatusResolved, id); err != nil {
 			return fmt.Errorf("store: mark exported %d: %w", id, err)
 		}
 	}

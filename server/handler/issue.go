@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
+	"github.com/emergent-company/feedback-overlay/server/middleware"
 	"github.com/emergent-company/feedback-overlay/server/store"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/net/html"
@@ -53,9 +55,11 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 		labels = []string{items[0].Label}
 	}
 
-	login := ""
-	if v, ok := c.Get("github_login").(string); ok {
-		login = v
+	login := middleware.GetLogin(c)
+	for _, f := range items {
+		if f.GitHubUser != login {
+			return echo.NewHTTPError(http.StatusForbidden, "cannot export feedback you do not own")
+		}
 	}
 	title, body := buildIssueContent(items, login)
 	if req.Title != "" {
@@ -65,7 +69,8 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 	// Use a server-side GitHub App installation token — not subject to org OAuth restrictions.
 	installToken, err := h.GHConfig.InstallationToken(ctx)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get installation token: "+err.Error())
+		c.Logger().Errorf("get installation token: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get installation token")
 	}
 
 	result, err := github.CreateIssue(ctx, installToken, github.CreateIssueParams{
@@ -75,7 +80,8 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 		Labels: labels,
 	})
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadGateway, "failed to create GitHub issue: "+err.Error())
+		c.Logger().Errorf("create github issue: %v", err)
+		return echo.NewHTTPError(http.StatusBadGateway, "failed to create GitHub issue")
 	}
 
 	// Mark items as exported.
@@ -244,6 +250,13 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	return title, sb.String()
 }
 
+// issueSyncInterval bounds how often a single issue's GitHub state is
+// re-checked; issueSyncPerRequest caps GitHub calls per badge load.
+const (
+	issueSyncInterval   = 5 * time.Minute
+	issueSyncPerRequest = 20
+)
+
 // HandleListIssues handles GET /issues?url=<url>.
 // Returns open GitHub issues recorded for a page, for badge rendering.
 func (h *Handler) HandleListIssues(c echo.Context) error {
@@ -252,10 +265,13 @@ func (h *Handler) HandleListIssues(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "url query parameter is required")
 	}
 
-	issues, err := h.Store.ListOpenGitHubIssuesByURL(c.Request().Context(), pageURL)
+	ctx := c.Request().Context()
+	issues, err := h.Store.ListOpenGitHubIssuesByURL(ctx, pageURL)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list issues")
 	}
+
+	issues = h.syncIssueStates(ctx, issues)
 
 	type issueBadge struct {
 		Selector    string `json:"selector"`
@@ -265,6 +281,9 @@ func (h *Handler) HandleListIssues(c echo.Context) error {
 	}
 	out := make([]issueBadge, 0, len(issues))
 	for _, gi := range issues {
+		if gi.State != "open" {
+			continue
+		}
 		out = append(out, issueBadge{
 			Selector:    gi.Selector,
 			IssueNumber: gi.IssueNumber,
@@ -273,6 +292,41 @@ func (h *Handler) HandleListIssues(c echo.Context) error {
 		})
 	}
 	return c.JSON(http.StatusOK, out)
+}
+
+// syncIssueStates re-checks the GitHub state of issues whose local state is
+// stale, updating the store and returning the possibly-updated list. It is
+// best-effort: any sync error leaves the issue in its last known state.
+func (h *Handler) syncIssueStates(ctx context.Context, issues []store.GitHubIssue) []store.GitHubIssue {
+	var token string
+	tokenReady := false
+	synced := 0
+	for i := range issues {
+		if time.Since(issues[i].SyncedAt) <= issueSyncInterval {
+			continue
+		}
+		if synced >= issueSyncPerRequest {
+			break
+		}
+		if !tokenReady {
+			t, err := h.GHConfig.InstallationToken(ctx)
+			if err != nil {
+				// Can't authenticate to GitHub right now; keep last known state.
+				break
+			}
+			token = t
+			tokenReady = true
+		}
+		state, err := github.GetIssue(ctx, token, issues[i].Repo, issues[i].IssueNumber)
+		if err != nil {
+			continue
+		}
+		if err := h.Store.SetGitHubIssueState(ctx, issues[i].IssueNumber, issues[i].Repo, state); err == nil {
+			issues[i].State = state
+			synced++
+		}
+	}
+	return issues
 }
 
 // selectorShort returns the last segment of a CSS selector for use in titles.
@@ -293,7 +347,10 @@ func formatEventTime(v any) string {
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		// Try without timezone.
+		// Try without timezone; guard against short strings so s[:19] can't panic.
+		if len(s) < 19 {
+			return s
+		}
 		t, err = time.Parse("2006-01-02T15:04:05", s[:19])
 		if err != nil {
 			return s

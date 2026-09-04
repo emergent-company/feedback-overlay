@@ -19,6 +19,10 @@ import (
 
 const apiBase = "https://api.github.com"
 
+// httpClient is shared across all GitHub API calls, with a bounded timeout so
+// a hung upstream request cannot block the server indefinitely.
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 // AppConfig holds GitHub App credentials.
 type AppConfig struct {
 	AppID          string
@@ -85,14 +89,16 @@ func (c *AppConfig) InstallationToken(ctx context.Context) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+appTok)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("github app: get installation token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		var gh struct{ Message string `json:"message"` }
+		var gh struct {
+			Message string `json:"message"`
+		}
 		_ = json.NewDecoder(resp.Body).Decode(&gh)
 		return "", fmt.Errorf("github app: get installation token: status %d: %s", resp.StatusCode, gh.Message)
 	}
@@ -134,7 +140,7 @@ func (c *AppConfig) ExchangeCode(ctx context.Context, code string) (string, erro
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("github app: exchange code: %w", err)
 	}
@@ -167,7 +173,7 @@ func GetUser(ctx context.Context, accessToken string) (User, error) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return User{}, fmt.Errorf("github: get user: %w", err)
 	}
@@ -216,13 +222,15 @@ func CreateIssue(ctx context.Context, accessToken string, p CreateIssueParams) (
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return CreateIssueResponse{}, fmt.Errorf("github: create issue: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		var gh struct{ Message string `json:"message"` }
+		var gh struct {
+			Message string `json:"message"`
+		}
 		_ = json.NewDecoder(resp.Body).Decode(&gh)
 		return CreateIssueResponse{}, fmt.Errorf("github: create issue: status %d: %s", resp.StatusCode, gh.Message)
 	}
@@ -231,4 +239,36 @@ func CreateIssue(ctx context.Context, accessToken string, p CreateIssueParams) (
 		return CreateIssueResponse{}, fmt.Errorf("github: decode issue response: %w", err)
 	}
 	return result, nil
+}
+
+// GetIssue fetches the current state ("open" or "closed") of a GitHub issue.
+func GetIssue(ctx context.Context, accessToken, repo string, number int64) (string, error) {
+	return getIssue(ctx, apiBase, accessToken, repo, number)
+}
+
+func getIssue(ctx context.Context, base, accessToken, repo string, number int64) (string, error) {
+	parts := strings.SplitN(repo, "/", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("github: invalid repo %q (want owner/repo)", repo)
+	}
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d", base, parts[0], parts[1], number)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("github: get issue: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github: get issue: status %d", resp.StatusCode)
+	}
+	var result struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("github: decode issue: %w", err)
+	}
+	return result.State, nil
 }

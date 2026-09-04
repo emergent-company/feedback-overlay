@@ -1,10 +1,13 @@
 package handler
 
 import (
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
-	"sync"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
@@ -12,45 +15,41 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// stateStore is a simple in-memory map of OAuth state → expiry.
-var (
-	statesMu sync.Mutex
-	states   = map[string]time.Time{}
-)
+const oauthStateTTL = 10 * time.Minute
 
-func generateState() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+// generateState returns a self-contained, HMAC-signed OAuth state token that
+// embeds an expiry timestamp. It needs no server-side storage, so it works
+// across replicas and survives restarts.
+func (h *Handler) generateState() string {
+	payload := strconv.FormatInt(time.Now().Add(oauthStateTTL).Unix(), 10)
+	return payload + "." + signState(payload, h.JWTSecret)
 }
 
-func storeState(s string) {
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	for k, exp := range states {
-		if time.Now().After(exp) {
-			delete(states, k)
-		}
-	}
-	states[s] = time.Now().Add(10 * time.Minute)
-}
-
-func validateAndConsumeState(s string) bool {
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	exp, ok := states[s]
-	if !ok || time.Now().After(exp) {
+// validateState verifies the signature and expiry of an OAuth state token.
+func (h *Handler) validateState(s string) bool {
+	payload, sig, ok := strings.Cut(s, ".")
+	if !ok {
 		return false
 	}
-	delete(states, s)
-	return true
+	exp, err := strconv.ParseInt(payload, 10, 64)
+	if err != nil {
+		return false
+	}
+	if time.Now().Unix() > exp {
+		return false
+	}
+	return hmac.Equal([]byte(sig), []byte(signState(payload, h.JWTSecret)))
+}
+
+func signState(payload, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // HandleGitHubLogin redirects the user to the GitHub App OAuth authorization page.
 func (h *Handler) HandleGitHubLogin(c echo.Context) error {
-	state := generateState()
-	storeState(state)
-	return c.Redirect(http.StatusTemporaryRedirect, h.GHConfig.AuthCodeURL(state))
+	return c.Redirect(http.StatusTemporaryRedirect, h.GHConfig.AuthCodeURL(h.generateState()))
 }
 
 // HandleGitHubCallback handles the OAuth callback from GitHub App.
@@ -58,7 +57,7 @@ func (h *Handler) HandleGitHubLogin(c echo.Context) error {
 // issues a session JWT, and closes the popup.
 func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 	state := c.QueryParam("state")
-	if !validateAndConsumeState(state) {
+	if !h.validateState(state) {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid or expired OAuth state")
 	}
 
@@ -84,9 +83,12 @@ func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue session token")
 	}
 
+	tokJSON, _ := json.Marshal(jwtToken)
+	loginJSON, _ := json.Marshal(user.Login)
+	avatarJSON, _ := json.Marshal(user.AvatarURL)
 	html := `<!DOCTYPE html><html><body><script>
 if(window.opener){
-  window.opener.postMessage({type:'feedback_overlay_auth',token:'` + jwtToken + `',login:'` + user.Login + `',avatar:'` + user.AvatarURL + `'},'*');
+  window.opener.postMessage({type:'feedback_overlay_auth',token:` + string(tokJSON) + `,login:` + string(loginJSON) + `,avatar:` + string(avatarJSON) + `},'*');
 }
 window.close();
 </script></body></html>`

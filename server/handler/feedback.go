@@ -148,19 +148,22 @@ func (h *Handler) HandleGetFeedback(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "feedback not found")
 	}
+	if f.GitHubUser != middleware.GetLogin(c) {
+		return echo.NewHTTPError(http.StatusForbidden, "feedback not found")
+	}
 
 	resp := map[string]any{
-		"id":           f.ID,
-		"url":          f.URL,
-		"selector":     f.Selector,
-		"comment":      f.Comment,
-		"context":      json.RawMessage(f.ContextJSON),
-		"github_user":  f.GitHubUser,
-		"repo":         f.Repo,
-		"label":        f.Label,
-		"status":       f.Status,
-		"issue_url":    f.IssueURL,
-		"created_at":   f.CreatedAt,
+		"id":             f.ID,
+		"url":            f.URL,
+		"selector":       f.Selector,
+		"comment":        f.Comment,
+		"context":        json.RawMessage(f.ContextJSON),
+		"github_user":    f.GitHubUser,
+		"repo":           f.Repo,
+		"label":          f.Label,
+		"status":         f.Status,
+		"issue_url":      f.IssueURL,
+		"created_at":     f.CreatedAt,
 		"has_screenshot": len(f.Screenshot) > 0,
 	}
 	return c.JSON(http.StatusOK, resp)

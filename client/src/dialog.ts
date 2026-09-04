@@ -614,7 +614,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     } catch (err) {
       errDiv.textContent = String(err);
       submitBtn.disabled = false;
-      submitBtn.textContent = "Submit";
+      submitBtn.textContent = "Save";
     }
   });
 

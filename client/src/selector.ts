@@ -43,20 +43,18 @@ export function buildSelector(el: Element): string {
     // disambiguate siblings with the same component name.
     const comp = current.getAttribute("data-component");
     if (comp) {
-      const parent = current.parentElement;
+      const parent: Element | null = current.parentElement;
       if (parent) {
         const compSiblings = Array.from(parent.children).filter(
           (c) => c.getAttribute("data-component") === comp
         );
         if (compSiblings.length > 1) {
-          const idx = compSiblings.indexOf(current) + 1;
-          parts.unshift(`[data-component="${CSS.escape(comp)}"]:nth-of-type(${compSiblings.indexOf(current as Element) + 1})`);
-          // Use actual nth-of-type among all same-tag siblings for CSS validity.
+          // Use nth-of-type among same-tag siblings for CSS validity.
           const tagSiblings = Array.from(parent.children).filter(
             (c) => c.tagName === current!.tagName
           );
           const tagIdx = tagSiblings.indexOf(current) + 1;
-          parts[0] = `[data-component="${CSS.escape(comp)}"]:nth-of-type(${tagIdx})`;
+          parts.unshift(`[data-component="${CSS.escape(comp)}"]:nth-of-type(${tagIdx})`);
         } else {
           parts.unshift(`[data-component="${CSS.escape(comp)}"]`);
         }
@@ -75,7 +73,7 @@ export function buildSelector(el: Element): string {
     }
 
     // Plain element — compute nth-of-type among same-tag siblings.
-    const parent = current.parentElement;
+    const parent: Element | null = current.parentElement;
     const tag = current.tagName.toLowerCase();
     if (parent) {
       const siblings = Array.from(parent.children).filter(

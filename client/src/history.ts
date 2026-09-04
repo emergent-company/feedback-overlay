@@ -29,6 +29,15 @@ function pushEvent(type: SessionEvent["type"], data: Record<string, unknown>): v
   if (events.length > MAX_EVENTS) events.shift();
 }
 
+// isSensitive reports whether an input's value should be redacted from session
+// history. Detects password fields plus common sensitive-field signals (name,
+// id, autocomplete) so tokens, card numbers, and SSNs never get recorded.
+function isSensitive(el: HTMLInputElement): boolean {
+  if (el.type === "password") return true;
+  const hay = [el.name, el.id, el.getAttribute("autocomplete") ?? ""].join(" ").toLowerCase();
+  return /(password|passwd|pwd|secret|token|api[_-]?key|credit|card|cvv|cvc|ssn|social.?security|routing|iban)/.test(hay);
+}
+
 export function startRecording(): void {
   if (started) return;
   if (window.top !== window.self) return;
@@ -44,27 +53,36 @@ export function startRecording(): void {
     }
   });
 
-  const origPushState = history.pushState.bind(history);
-  history.pushState = function (this: History, ...args: Parameters<History["pushState"]>) {
-    const prevUrl = window.location.href;
-    origPushState(...args);
-    const newUrl = window.location.href;
-    if (newUrl !== prevUrl) {
-      pushEvent("navigation", { url: newUrl, previousUrl: prevUrl, title: document.title });
-      currentUrl = newUrl;
-    }
-  };
+  // Idempotent monkey-patching: wrap only once even if startRecording is
+  // re-entered, and preserve the original return values.
+  const PATCHED = "__fo_history_patched__";
+  if (!(history as unknown as Record<string, unknown>)[PATCHED]) {
+    (history as unknown as Record<string, unknown>)[PATCHED] = true;
 
-  const origReplaceState = history.replaceState.bind(history);
-  history.replaceState = function (this: History, ...args: Parameters<History["replaceState"]>) {
-    const prevUrl = window.location.href;
-    origReplaceState(...args);
-    const newUrl = window.location.href;
-    if (newUrl !== prevUrl) {
-      pushEvent("navigation", { url: newUrl, previousUrl: prevUrl, title: document.title });
-      currentUrl = newUrl;
-    }
-  };
+    const origPushState = history.pushState.bind(history);
+    history.pushState = function (this: History, ...args: Parameters<History["pushState"]>) {
+      const prevUrl = window.location.href;
+      const r = origPushState(...args);
+      const newUrl = window.location.href;
+      if (newUrl !== prevUrl) {
+        pushEvent("navigation", { url: newUrl, previousUrl: prevUrl, title: document.title });
+        currentUrl = newUrl;
+      }
+      return r;
+    };
+
+    const origReplaceState = history.replaceState.bind(history);
+    history.replaceState = function (this: History, ...args: Parameters<History["replaceState"]>) {
+      const prevUrl = window.location.href;
+      const r = origReplaceState(...args);
+      const newUrl = window.location.href;
+      if (newUrl !== prevUrl) {
+        pushEvent("navigation", { url: newUrl, previousUrl: prevUrl, title: document.title });
+        currentUrl = newUrl;
+      }
+      return r;
+    };
+  }
 
   document.addEventListener("input", (e: Event) => {
     const target = e.target as HTMLElement;
@@ -81,7 +99,7 @@ export function startRecording(): void {
     if (key === lastInputKey && now - lastInputTime < 500) {
       const last = events[events.length - 1];
       if (last?.type === "input") {
-        last.data.value = el.type === "password" ? "<password>" : el.value;
+        last.data.value = isSensitive(el) ? "<redacted>" : el.value;
         last.timestamp = new Date().toISOString();
         lastInputTime = now;
         return;
@@ -95,7 +113,7 @@ export function startRecording(): void {
       component,
       tagName: tag,
       inputType: el.type || "text",
-      value: el.type === "password" ? "<password>" : el.value,
+      value: isSensitive(el) ? "<redacted>" : el.value,
     });
   }, true);
 

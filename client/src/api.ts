@@ -106,6 +106,9 @@ export class APIClient {
       const text = await resp.text().catch(() => resp.statusText);
       throw new Error(`${resp.status}: ${text}`);
     }
+    if (resp.status === 204 || resp.status === 205) {
+      return undefined as T;
+    }
     return resp.json() as Promise<T>;
   }
 
@@ -140,10 +143,7 @@ export class APIClient {
 
   /** Deletes a feedback item. Requires authentication (own items only). */
   async deleteFeedback(id: number): Promise<void> {
-    await fetch(`${this.base}/feedback/${id}`, {
-      method: "DELETE",
-      headers: this.authHeaders(),
-    });
+    await this.fetchJSON<void>(`/feedback/${id}`, { method: "DELETE" });
   }
 
   /** Exports selected feedback items to a GitHub issue. */

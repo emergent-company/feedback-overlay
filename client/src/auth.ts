@@ -39,7 +39,8 @@ export class AuthManager {
    */
   login(): Promise<AuthUser> {
     return new Promise((resolve, reject) => {
-      const authUrl = `${this.config.apiBase}/auth/github`;
+      const apiOrigin = this.apiOrigin();
+      const authUrl = `${this.config.apiBase}/auth/github?origin=${encodeURIComponent(window.location.origin)}`;
       const popup = window.open(
         authUrl,
         "feedback_overlay_auth",
@@ -58,6 +59,9 @@ export class AuthManager {
 
       const handler = (e: MessageEvent) => {
         if (e.data?.type !== AUTH_MESSAGE_TYPE) return;
+        // Only accept the token from our own API origin — reject messages posted
+        // by any other window to prevent login forgery.
+        if (apiOrigin && e.origin !== apiOrigin) return;
         clearTimeout(timeout);
         cleanup();
 
@@ -98,6 +102,15 @@ export class AuthManager {
 
   logout(): void {
     this.clearSession();
+  }
+
+  /** Returns the origin of the API base URL, or "" if it can't be parsed. */
+  private apiOrigin(): string {
+    try {
+      return new URL(this.config.apiBase).origin;
+    } catch {
+      return "";
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

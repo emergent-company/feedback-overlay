@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -18,27 +19,41 @@ import (
 const oauthStateTTL = 10 * time.Minute
 
 // generateState returns a self-contained, HMAC-signed OAuth state token that
-// embeds an expiry timestamp. It needs no server-side storage, so it works
-// across replicas and survives restarts.
-func (h *Handler) generateState() string {
+// embeds an expiry timestamp and the opener origin. It needs no server-side
+// storage, so it works across replicas and survives restarts.
+func (h *Handler) generateState(origin string) string {
 	payload := strconv.FormatInt(time.Now().Add(oauthStateTTL).Unix(), 10)
+	if origin != "" {
+		payload += ":" + base64.RawURLEncoding.EncodeToString([]byte(origin))
+	}
 	return payload + "." + signState(payload, h.JWTSecret)
 }
 
-// validateState verifies the signature and expiry of an OAuth state token.
-func (h *Handler) validateState(s string) bool {
+// validateState verifies the signature and expiry of an OAuth state token and
+// returns the embedded opener origin (empty when none was provided).
+func (h *Handler) validateState(s string) (string, bool) {
 	payload, sig, ok := strings.Cut(s, ".")
 	if !ok {
-		return false
+		return "", false
 	}
-	exp, err := strconv.ParseInt(payload, 10, 64)
+	if !hmac.Equal([]byte(sig), []byte(signState(payload, h.JWTSecret))) {
+		return "", false
+	}
+	expStr, originEnc, hasOrigin := strings.Cut(payload, ":")
+	exp, err := strconv.ParseInt(expStr, 10, 64)
 	if err != nil {
-		return false
+		return "", false
 	}
 	if time.Now().Unix() > exp {
-		return false
+		return "", false
 	}
-	return hmac.Equal([]byte(sig), []byte(signState(payload, h.JWTSecret)))
+	origin := ""
+	if hasOrigin {
+		if b, err := base64.RawURLEncoding.DecodeString(originEnc); err == nil {
+			origin = string(b)
+		}
+	}
+	return origin, true
 }
 
 func signState(payload, secret string) string {
@@ -48,8 +63,11 @@ func signState(payload, secret string) string {
 }
 
 // HandleGitHubLogin redirects the user to the GitHub App OAuth authorization page.
+// The opener origin is threaded through the signed state so the callback can
+// target postMessage at it instead of "*".
 func (h *Handler) HandleGitHubLogin(c echo.Context) error {
-	return c.Redirect(http.StatusTemporaryRedirect, h.GHConfig.AuthCodeURL(h.generateState()))
+	origin := c.QueryParam("origin")
+	return c.Redirect(http.StatusTemporaryRedirect, h.GHConfig.AuthCodeURL(h.generateState(origin)))
 }
 
 // HandleGitHubCallback handles the OAuth callback from GitHub App.
@@ -57,7 +75,8 @@ func (h *Handler) HandleGitHubLogin(c echo.Context) error {
 // issues a session JWT, and closes the popup.
 func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 	state := c.QueryParam("state")
-	if !h.validateState(state) {
+	origin, ok := h.validateState(state)
+	if !ok {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid or expired OAuth state")
 	}
 
@@ -83,12 +102,17 @@ func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to issue session token")
 	}
 
+	targetOrigin := origin
+	if targetOrigin == "" {
+		targetOrigin = "*"
+	}
 	tokJSON, _ := json.Marshal(jwtToken)
 	loginJSON, _ := json.Marshal(user.Login)
 	avatarJSON, _ := json.Marshal(user.AvatarURL)
+	targetJSON, _ := json.Marshal(targetOrigin)
 	html := `<!DOCTYPE html><html><body><script>
 if(window.opener){
-  window.opener.postMessage({type:'feedback_overlay_auth',token:` + string(tokJSON) + `,login:` + string(loginJSON) + `,avatar:` + string(avatarJSON) + `},'*');
+  window.opener.postMessage({type:'feedback_overlay_auth',token:` + string(tokJSON) + `,login:` + string(loginJSON) + `,avatar:` + string(avatarJSON) + `},` + string(targetJSON) + `);
 }
 window.close();
 </script></body></html>`
@@ -98,8 +122,9 @@ window.close();
 
 // HandleMe returns the authenticated user's profile.
 func (h *Handler) HandleMe(c echo.Context) error {
+	avatar, _ := c.Get("avatar_url").(string)
 	return c.JSON(http.StatusOK, map[string]string{
 		"login":      middleware.GetLogin(c),
-		"avatar_url": c.Get("avatar_url").(string),
+		"avatar_url": avatar,
 	})
 }

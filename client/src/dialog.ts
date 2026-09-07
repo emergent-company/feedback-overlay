@@ -597,7 +597,18 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
 
   textarea.focus();
 
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      removeKey();
+      closeDialog();
+      opts.onCancel();
+    }
+  };
+  const removeKey = () => document.removeEventListener("keydown", onKey);
+  document.addEventListener("keydown", onKey);
+
   cancelBtn.addEventListener("click", () => {
+    removeKey();
     closeDialog();
     opts.onCancel();
   });
@@ -610,6 +621,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     errDiv.textContent = "";
     try {
       await opts.onSubmit(comment, getType());
+      removeKey();
       closeDialog();
     } catch (err) {
       errDiv.textContent = String(err);
@@ -641,6 +653,7 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
         return;
       }
       // Close immediately — export happens in background.
+      removeKey();
       closeDialog();
       opts.onExport(ids, type, topic).catch((err: unknown) => {
         showToast(`Failed to create issue: ${String(err)}`);
@@ -653,17 +666,10 @@ export function showSubmitDialog(opts: SubmitFeedbackOptions): void {
     }
   });
 
-  // Backdrop click / Escape to cancel.
+  // Backdrop click to cancel.
   dialog.addEventListener("click", (e) => {
-    if (e.target === dialog) { closeDialog(); opts.onCancel(); }
+    if (e.target === dialog) { removeKey(); closeDialog(); opts.onCancel(); }
   });
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      closeDialog(); opts.onCancel();
-      document.removeEventListener("keydown", onKey);
-    }
-  };
-  document.addEventListener("keydown", onKey);
 }
 
 export interface LoginDialogOptions {

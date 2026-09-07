@@ -109,7 +109,7 @@ FROM feedback WHERE id = ?`
 // ListByURL returns all open feedback items for a given page URL, newest first.
 func (s *Store) ListByURL(ctx context.Context, url string) ([]Feedback, error) {
 	const q = `
-SELECT id, url, selector, comment, context_json, screenshot, github_user, repo, label, status, COALESCE(issue_url,''), created_at
+SELECT id, url, selector, comment, context_json, COALESCE(length(screenshot), 0), github_user, repo, label, status, COALESCE(issue_url,''), created_at
 FROM feedback WHERE url = ? AND status = 'open'
 ORDER BY created_at DESC`
 
@@ -123,9 +123,10 @@ ORDER BY created_at DESC`
 	for rows.Next() {
 		var f Feedback
 		var createdAt string
+		var screenshotLen int
 		if err := rows.Scan(
 			&f.ID, &f.URL, &f.Selector, &f.Comment, &f.ContextJSON,
-			&f.Screenshot, &f.GitHubUser, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt,
+			&screenshotLen, &f.GitHubUser, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt,
 		); err != nil {
 			return nil, fmt.Errorf("store: scan feedback: %w", err)
 		}

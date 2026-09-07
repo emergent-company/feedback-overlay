@@ -347,10 +347,10 @@ func formatEventTime(v any) string {
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		// Try without timezone; guard against short strings so s[:19] can't panic.
 		if len(s) < 19 {
 			return s
 		}
+		// Try without timezone.
 		t, err = time.Parse("2006-01-02T15:04:05", s[:19])
 		if err != nil {
 			return s

@@ -19,9 +19,9 @@ import (
 
 const apiBase = "https://api.github.com"
 
-// httpClient is shared across all GitHub API calls, with a bounded timeout so
-// a hung upstream request cannot block the server indefinitely.
-var httpClient = &http.Client{Timeout: 15 * time.Second}
+// httpClient is the shared HTTP client for all GitHub API calls.
+// Timeout prevents a hung upstream from blocking a request forever.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // AppConfig holds GitHub App credentials.
 type AppConfig struct {
@@ -31,19 +31,26 @@ type AppConfig struct {
 	RedirectURI    string
 	PrivateKeyPEM  string // RSA private key in PEM format
 	InstallationID string // numeric installation ID on the target org/account
+
+	keyOnce sync.Once
+	keyVal  *rsa.PrivateKey
+	keyErr  error
 }
 
-// privateKey parses the RSA private key from PEM.
+// privateKey parses and caches the RSA private key from PEM.
 func (c *AppConfig) privateKey() (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(c.PrivateKeyPEM))
-	if block == nil {
-		return nil, fmt.Errorf("github app: failed to decode PEM block")
-	}
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("github app: parse private key: %w", err)
-	}
-	return key, nil
+	c.keyOnce.Do(func() {
+		block, _ := pem.Decode([]byte(c.PrivateKeyPEM))
+		if block == nil {
+			c.keyErr = fmt.Errorf("github app: failed to decode PEM block")
+			return
+		}
+		c.keyVal, c.keyErr = x509.ParsePKCS1PrivateKey(block.Bytes)
+		if c.keyErr != nil {
+			c.keyErr = fmt.Errorf("github app: parse private key: %w", c.keyErr)
+		}
+	})
+	return c.keyVal, c.keyErr
 }
 
 // appJWT creates a short-lived JWT signed with the App's private key.

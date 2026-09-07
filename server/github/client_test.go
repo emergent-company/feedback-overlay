@@ -14,7 +14,7 @@ func TestGetIssue(t *testing.T) {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"state":"closed","number":42,"title":"x"}`)
+		_, _ = io.WriteString(w, `{"state":"closed","number":42,"title":"x"}`)
 	}))
 	defer srv.Close()
 

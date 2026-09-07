@@ -133,13 +133,13 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	if u, ok := ctx["url"].(string); ok && u != "" {
 		pageURL = u
 	}
-	sb.WriteString(fmt.Sprintf("**URL:** %s  \n", pageURL))
+	fmt.Fprintf(&sb, "**URL:** %s  \n", pageURL)
 
 	if branch, ok := ctx["branch"].(string); ok && branch != "" {
-		sb.WriteString(fmt.Sprintf("**Branch:** `%s`  \n", branch))
+		fmt.Fprintf(&sb, "**Branch:** `%s`  \n", branch)
 	}
 	if appVersion, ok := ctx["appVersion"].(string); ok && appVersion != "" {
-		sb.WriteString(fmt.Sprintf("**Version:** `%s`  \n", appVersion))
+		fmt.Fprintf(&sb, "**Version:** `%s`  \n", appVersion)
 	}
 
 	if vp, ok := ctx["viewport"].(map[string]any); ok {
@@ -147,9 +147,9 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 		h, _ := vp["height"].(float64)
 		dpr, _ := ctx["devicePixelRatio"].(float64)
 		if w > 0 && h > 0 {
-			sb.WriteString(fmt.Sprintf("**Viewport:** %.0f × %.0f px", w, h))
+			fmt.Fprintf(&sb, "**Viewport:** %.0f × %.0f px", w, h)
 			if dpr > 0 && dpr != 1 {
-				sb.WriteString(fmt.Sprintf(" (%.1f× DPR)", dpr))
+				fmt.Fprintf(&sb, " (%.1f× DPR)", dpr)
 			}
 			sb.WriteString("  \n")
 		}
@@ -159,14 +159,14 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 
 	// One comment block per feedback item.
 	for i, f := range items {
-		sb.WriteString(fmt.Sprintf("### Comment %d\n\n", i+1))
-		sb.WriteString(fmt.Sprintf("**@%s**  \n%s\n\n", f.GitHubUser, f.Comment))
+		fmt.Fprintf(&sb, "### Comment %d\n\n", i+1)
+		fmt.Fprintf(&sb, "**@%s**  \n%s\n\n", f.GitHubUser, f.Comment)
 	}
 
 	sb.WriteString("---\n\n")
 
 	// Element info — written once, not per comment.
-	sb.WriteString(fmt.Sprintf("**Selector:** `%s`\n\n", first.Selector))
+	fmt.Fprintf(&sb, "**Selector:** `%s`\n\n", first.Selector)
 
 	// Element position & size (visible, not folded).
 	if br, ok := ctx["boundingRect"].(map[string]any); ok {
@@ -174,7 +174,7 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 		left, _ := br["left"].(float64)
 		w, _ := br["width"].(float64)
 		h, _ := br["height"].(float64)
-		sb.WriteString(fmt.Sprintf("**Position:** top %.0f, left %.0f — **Size:** %.0f × %.0f px  \n\n", top, left, w, h))
+		fmt.Fprintf(&sb, "**Position:** top %.0f, left %.0f — **Size:** %.0f × %.0f px  \n\n", top, left, w, h)
 	}
 
 	// CSS framework detection (visible, not folded).
@@ -186,7 +186,7 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 			}
 		}
 		if len(names) > 0 {
-			sb.WriteString(fmt.Sprintf("**CSS framework:** %s  \n\n", strings.Join(names, ", ")))
+			fmt.Fprintf(&sb, "**CSS framework:** %s  \n\n", strings.Join(names, ", "))
 		}
 	}
 
@@ -207,7 +207,7 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 		}
 		for _, k := range order {
 			if v, ok := styles[k].(string); ok {
-				sb.WriteString(fmt.Sprintf("%-24s %s\n", k+":", v))
+				fmt.Fprintf(&sb, "%-24s %s\n", k+":", v)
 			}
 		}
 		sb.WriteString("```\n\n</details>\n\n")
@@ -242,7 +242,7 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 			evTime := formatEventTime(ev["timestamp"])
 			evData, _ := ev["data"].(map[string]any)
 			detail := formatEventDetail(evType, evData)
-			sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s |\n", i+1, evTime, evType, detail))
+			fmt.Fprintf(&sb, "| %d | %s | %s | %s |\n", i+1, evTime, evType, detail)
 		}
 		sb.WriteString("\n</details>\n")
 	}

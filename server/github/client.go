@@ -100,7 +100,7 @@ func (c *AppConfig) InstallationToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("github app: get installation token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		var gh struct {
@@ -151,7 +151,7 @@ func (c *AppConfig) ExchangeCode(ctx context.Context, code string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("github app: exchange code: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		AccessToken string `json:"access_token"`
@@ -184,7 +184,7 @@ func GetUser(ctx context.Context, accessToken string) (User, error) {
 	if err != nil {
 		return User{}, fmt.Errorf("github: get user: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return User{}, fmt.Errorf("github: get user: status %d", resp.StatusCode)
 	}
@@ -233,7 +233,7 @@ func CreateIssue(ctx context.Context, accessToken string, p CreateIssueParams) (
 	if err != nil {
 		return CreateIssueResponse{}, fmt.Errorf("github: create issue: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		var gh struct {
 			Message string `json:"message"`
@@ -267,7 +267,7 @@ func getIssue(ctx context.Context, base, accessToken, repo string, number int64)
 	if err != nil {
 		return "", fmt.Errorf("github: get issue: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("github: get issue: status %d", resp.StatusCode)
 	}

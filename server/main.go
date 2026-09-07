@@ -58,7 +58,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: open store: %v\n", err)
 		os.Exit(1)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// ── GitHub App config ─────────────────────────────────────────────────────
 	ghCfg := &github.AppConfig{
@@ -73,7 +73,18 @@ func main() {
 	// ── Echo server ───────────────────────────────────────────────────────────
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(middleware.Logger())
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogMethod:  true,
+		LogURI:     true,
+		LogStatus:  true,
+		LogLatency: true,
+		LogError:   true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			c.Logger().Infof("method=%s uri=%s status=%d latency=%s error=%v",
+				v.Method, v.URI, v.Status, v.Latency, v.Error)
+			return nil
+		},
+	}))
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit(envOr("MAX_BODY_BYTES", "10MB")))
 

@@ -48,7 +48,7 @@ ORDER BY issue_number DESC`
 	if err != nil {
 		return nil, fmt.Errorf("store: list github issues: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var issues []GitHubIssue
 	for rows.Next() {

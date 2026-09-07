@@ -52,7 +52,7 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 
 	var v int
 	if err := s2.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&v); err != nil {
@@ -69,7 +69,7 @@ func TestSetGitHubIssueState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
 	if err := s.CreateGitHubIssue(ctx, GitHubIssue{
@@ -111,7 +111,7 @@ func TestForeignKeysEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// Create a child table referencing feedback.id.
 	if _, err := s.db.Exec(`CREATE TABLE child (id INTEGER PRIMARY KEY, feedback_id INTEGER REFERENCES feedback(id))`); err != nil {

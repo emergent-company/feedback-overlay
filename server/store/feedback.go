@@ -117,7 +117,7 @@ ORDER BY created_at DESC`
 	if err != nil {
 		return nil, fmt.Errorf("store: list by url: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []Feedback
 	for rows.Next() {
@@ -148,7 +148,7 @@ ORDER BY selector`
 	if err != nil {
 		return nil, fmt.Errorf("store: summary by url: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var summaries []URLSummary
 	for rows.Next() {

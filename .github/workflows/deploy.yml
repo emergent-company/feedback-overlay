@@ -137,6 +137,7 @@ jobs:
             "GH_APP_PRIVATE_KEY_PATH=/run/secrets/gh-app.pem" \
             "JWT_SECRET=${{ secrets.FEEDBACK_JWT_SECRET }}" \
             "ALLOWED_ORIGINS=${{ secrets.FEEDBACK_ALLOWED_ORIGINS }}" \
+            "MCP_API_KEY=${{ secrets.FEEDBACK_MCP_API_KEY }}" \
             "TRAEFIK_HOST=${{ secrets.TRAEFIK_HOST }}" \
             | ssh feedback-server 'cat > /opt/stacks/feedback-overlay/.env'
           printf '%s' '${{ secrets.GH_APP_PRIVATE_KEY }}' \

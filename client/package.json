@@ -7,6 +7,9 @@
     "build:dev": "esbuild src/index.ts --bundle --format=iife --global-name=FeedbackOverlay --outfile=../server/static/feedback-overlay.js --sourcemap",
     "watch": "esbuild src/index.ts --bundle --format=iife --global-name=FeedbackOverlay --outfile=../server/static/feedback-overlay.js --sourcemap --watch"
   },
+  "dependencies": {
+    "html2canvas": "^1.4.1"
+  },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"

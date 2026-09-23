@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"crypto/subtle"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -8,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/emergent-company/feedback-overlay/server/github"
 	"github.com/emergent-company/feedback-overlay/server/handler"
@@ -15,6 +18,8 @@ import (
 	"github.com/emergent-company/feedback-overlay/server/store"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/time/rate"
 )
 
@@ -134,6 +139,11 @@ func main() {
 	e.GET("/feedback", h.HandleListFeedback)
 	e.GET("/issues", h.HandleListIssues)
 
+	// Snapshot — public by secret token (rate-limited).
+	snapshotLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(
+		rate.Limit(envFloatOr("SNAPSHOT_RATE_LIMIT_RPS", 5))))
+	e.GET("/snapshot/:id", h.HandleGetSnapshot, snapshotLimiter)
+
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))
 	auth.GET("/me", h.HandleMe)
@@ -150,6 +160,31 @@ func main() {
 
 	auth.POST("/feedback", h.HandleCreateFeedback, feedbackLimiter)
 	auth.POST("/issue/export", h.HandleExportIssue, exportLimiter)
+
+	// ── MCP server (optional; enabled when MCP_API_KEY is set) ────────────────
+	if apiKey := os.Getenv("MCP_API_KEY"); apiKey != "" {
+		mcpSrv := h.MCPServer()
+		streamable := mcp.NewStreamableHTTPHandler(
+			func(_ *http.Request) *mcp.Server { return mcpSrv },
+			&mcp.StreamableHTTPOptions{
+				Stateless:    true,
+				JSONResponse: true,
+				// Disable localhost/DNS-rebinding protection: the server is
+				// reached through a trusted reverse proxy (traefik) on loopback,
+				// which preserves the public Host header and would otherwise
+				// trigger a 403. Bearer auth is the real gate.
+				DisableLocalhostProtection: true,
+			},
+		)
+		verify := func(_ context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
+			if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
+				return nil, mcpauth.ErrInvalidToken
+			}
+			return &mcpauth.TokenInfo{Scopes: []string{"mcp"}, Expiration: time.Now().Add(time.Hour)}, nil
+		}
+		authed := mcpauth.RequireBearerToken(verify, nil)(streamable)
+		e.Any("/mcp", echo.WrapHandler(authed))
+	}
 
 	// ── Start ─────────────────────────────────────────────────────────────────
 	fmt.Printf("feedback-overlay %s (%s) listening on :%s\n", Version, Commit, port)

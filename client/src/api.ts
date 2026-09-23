@@ -31,6 +31,8 @@ export interface CreateFeedbackParams {
   repo: string;
   label: string;
   feedbackType?: string;
+  screenshot?: string;
+  snapshot?: string;
 }
 
 export interface ExportIssueParams {

@@ -18,18 +18,21 @@ const (
 
 // Feedback is a single user-submitted feedback item.
 type Feedback struct {
-	ID          int64
-	URL         string
-	Selector    string
-	Comment     string
-	ContextJSON string
-	Screenshot  []byte // may be nil
-	GitHubUser  string
-	Repo        string
-	Label       string
-	Status      FeedbackStatus
-	IssueURL    string
-	CreatedAt   time.Time
+	ID             int64
+	URL            string
+	Selector       string
+	Comment        string
+	ContextJSON    string
+	Screenshot     []byte // may be nil
+	Snapshot       []byte // may be nil
+	SnapshotSecret string
+	SnapshotSize   int
+	GitHubUser     string
+	Repo           string
+	Label          string
+	Status         FeedbackStatus
+	IssueURL       string
+	CreatedAt      time.Time
 }
 
 // URLSummary is a lightweight projection returned for badge rendering.
@@ -47,6 +50,7 @@ type CreateParams struct {
 	Comment     string
 	ContextJSON string
 	Screenshot  []byte
+	Snapshot    []byte
 	GitHubUser  string
 	Repo        string
 	Label       string
@@ -59,14 +63,14 @@ func (s *Store) Create(ctx context.Context, p CreateParams) (Feedback, error) {
 		label = "feedback"
 	}
 	const q = `
-INSERT INTO feedback (url, selector, comment, context_json, screenshot, github_user, repo, label)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO feedback (url, selector, comment, context_json, screenshot, github_user, repo, label, snapshot, snapshot_size)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id, created_at`
 
 	var f Feedback
 	var createdAt string
 	err := s.db.QueryRowContext(ctx, q,
-		p.URL, p.Selector, p.Comment, p.ContextJSON, p.Screenshot, p.GitHubUser, p.Repo, label,
+		p.URL, p.Selector, p.Comment, p.ContextJSON, p.Screenshot, p.GitHubUser, p.Repo, label, p.Snapshot, len(p.Snapshot),
 	).Scan(&f.ID, &createdAt)
 	if err != nil {
 		return Feedback{}, fmt.Errorf("store: create feedback: %w", err)
@@ -76,6 +80,8 @@ RETURNING id, created_at`
 	f.Comment = p.Comment
 	f.ContextJSON = p.ContextJSON
 	f.Screenshot = p.Screenshot
+	f.Snapshot = p.Snapshot
+	f.SnapshotSize = len(p.Snapshot)
 	f.GitHubUser = p.GitHubUser
 	f.Repo = p.Repo
 	f.Label = label
@@ -87,7 +93,8 @@ RETURNING id, created_at`
 // Get returns a single feedback item by ID.
 func (s *Store) Get(ctx context.Context, id int64) (Feedback, error) {
 	const q = `
-SELECT id, url, selector, comment, context_json, screenshot, github_user, repo, label, status, COALESCE(issue_url,''), created_at
+SELECT id, url, selector, comment, context_json, screenshot, github_user, repo, label, status, COALESCE(issue_url,''), created_at,
+       COALESCE(snapshot_secret,''), COALESCE(snapshot_size,0), snapshot
 FROM feedback WHERE id = ?`
 
 	var f Feedback
@@ -95,6 +102,7 @@ FROM feedback WHERE id = ?`
 	err := s.db.QueryRowContext(ctx, q, id).Scan(
 		&f.ID, &f.URL, &f.Selector, &f.Comment, &f.ContextJSON,
 		&f.Screenshot, &f.GitHubUser, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt,
+		&f.SnapshotSecret, &f.SnapshotSize, &f.Snapshot,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Feedback{}, fmt.Errorf("store: feedback %d not found", id)
@@ -203,6 +211,15 @@ func (s *Store) MarkExported(ctx context.Context, ids []int64, issueURL string) 
 		}
 	}
 	return tx.Commit()
+}
+
+// SetSnapshotSecret sets the retrieval secret for a feedback item's snapshot.
+func (s *Store) SetSnapshotSecret(ctx context.Context, id int64, secret string) error {
+	const q = `UPDATE feedback SET snapshot_secret = ? WHERE id = ?`
+	if _, err := s.db.ExecContext(ctx, q, secret, id); err != nil {
+		return fmt.Errorf("store: set snapshot secret: %w", err)
+	}
+	return nil
 }
 
 func splitCSV(s string) []string {

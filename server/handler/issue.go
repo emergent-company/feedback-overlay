@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -61,7 +63,27 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusForbidden, "cannot export feedback you do not own")
 		}
 	}
-	title, body := buildIssueContent(items, login)
+
+	// Mint a snapshot secret for every item that captured a snapshot.
+	secrets := make(map[int64]string)
+	for _, f := range items {
+		if len(f.Snapshot) == 0 && len(f.Screenshot) == 0 {
+			continue
+		}
+		secret, err := randomSecret()
+		if err != nil {
+			c.Logger().Errorf("mint snapshot secret: %v", err)
+			continue
+		}
+		if err := h.Store.SetSnapshotSecret(ctx, f.ID, secret); err != nil {
+			c.Logger().Errorf("store snapshot secret: %v", err)
+			continue
+		}
+		secrets[f.ID] = secret
+	}
+
+	baseURL := snapshotBaseURL(h.GHConfig.RedirectURI)
+	title, body := buildIssueContent(items, login, secrets, baseURL)
 	if req.Title != "" {
 		title = req.Title
 	}
@@ -90,6 +112,7 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 	}
 
 	// Store the issue reference for badge display.
+	feedbackIDs, _ := json.Marshal(req.IDs)
 	if err := h.Store.CreateGitHubIssue(ctx, store.GitHubIssue{
 		IssueNumber: int64(result.Number),
 		IssueURL:    result.HTMLURL,
@@ -97,6 +120,7 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 		Title:       title,
 		PageURL:     items[0].URL,
 		Selector:    items[0].Selector,
+		FeedbackIDs: string(feedbackIDs),
 	}); err != nil {
 		c.Logger().Errorf("store github issue: %v", err)
 	}
@@ -108,7 +132,7 @@ func (h *Handler) HandleExportIssue(c echo.Context) error {
 }
 
 // buildIssueContent formats the GitHub issue title and Markdown body.
-func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
+func buildIssueContent(items []store.Feedback, _ string, secrets map[int64]string, baseURL string) (title, body string) {
 	if len(items) == 0 {
 		return "Feedback report", ""
 	}
@@ -161,6 +185,22 @@ func buildIssueContent(items []store.Feedback, _ string) (title, body string) {
 	for i, f := range items {
 		fmt.Fprintf(&sb, "### Comment %d\n\n", i+1)
 		fmt.Fprintf(&sb, "**@%s**  \n%s\n\n", f.GitHubUser, f.Comment)
+	}
+
+	// Snapshot links (only for items with a captured snapshot + secret).
+	if len(secrets) > 0 {
+		sb.WriteString("\n---\n\n## Full page snapshot\n\n")
+		for _, f := range items {
+			secret, ok := secrets[f.ID]
+			if !ok {
+				continue
+			}
+			if baseURL != "" {
+				fmt.Fprintf(&sb, "- [Download snapshot](%s/snapshot/%d?secret=%s)  \n", baseURL, f.ID, secret)
+			}
+			fmt.Fprintf(&sb, "  `feedback://snapshot/%d?secret=%s`\n", f.ID, secret)
+		}
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("---\n\n")
@@ -337,6 +377,24 @@ func selectorShort(sel string) string {
 		return last[:57] + "…"
 	}
 	return last
+}
+
+// randomSecret returns a hex-encoded, high-entropy random secret.
+func randomSecret() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// snapshotBaseURL derives the public origin from the GitHub redirect URI.
+func snapshotBaseURL(redirectURI string) string {
+	u, err := url.Parse(redirectURI)
+	if err != nil {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // formatEventTime formats an event timestamp (ISO string) to HH:MM:SS.

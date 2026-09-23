@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -19,6 +21,7 @@ type createFeedbackRequest struct {
 	Comment     string `json:"comment"`
 	ContextJSON any    `json:"context"`
 	Screenshot  string `json:"screenshot"` // base64-encoded PNG, may be empty
+	Snapshot    string `json:"snapshot"`
 	Repo        string `json:"repo"`
 	Label       string `json:"label"`
 }
@@ -53,12 +56,26 @@ func (h *Handler) HandleCreateFeedback(c echo.Context) error {
 		}
 	}
 
+	var snapshot []byte
+	if req.Snapshot != "" {
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
+		if _, err := gw.Write([]byte(req.Snapshot)); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid snapshot")
+		}
+		if err := gw.Close(); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid snapshot")
+		}
+		snapshot = buf.Bytes()
+	}
+
 	f, err := h.Store.Create(c.Request().Context(), store.CreateParams{
 		URL:         req.URL,
 		Selector:    req.Selector,
 		Comment:     req.Comment,
 		ContextJSON: ctxJSON,
 		Screenshot:  screenshot,
+		Snapshot:    snapshot,
 		GitHubUser:  middleware.GetLogin(c),
 		Repo:        req.Repo,
 		Label:       req.Label,

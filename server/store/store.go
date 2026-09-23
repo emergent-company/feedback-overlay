@@ -62,6 +62,12 @@ CREATE INDEX IF NOT EXISTS feedback_repo_idx      ON feedback(repo);
 CREATE INDEX IF NOT EXISTS github_issues_url_idx  ON github_issues(page_url);
 CREATE INDEX IF NOT EXISTS github_issues_repo_idx ON github_issues(repo);
 `},
+	{2, "snapshot", `
+ALTER TABLE feedback ADD COLUMN snapshot BLOB;
+ALTER TABLE feedback ADD COLUMN snapshot_secret TEXT;
+ALTER TABLE feedback ADD COLUMN snapshot_size INTEGER;
+ALTER TABLE github_issues ADD COLUMN feedback_ids TEXT;
+`},
 }
 
 // Store wraps the SQLite database connection.

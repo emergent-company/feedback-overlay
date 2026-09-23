@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -15,6 +17,7 @@ type GitHubIssue struct {
 	Title       string
 	PageURL     string
 	Selector    string
+	FeedbackIDs string
 	State       string // "open" | "closed"
 	CreatedAt   time.Time
 	SyncedAt    time.Time
@@ -24,16 +27,42 @@ type GitHubIssue struct {
 // duplicates (same issue_number + repo) so re-exports don't fail.
 func (s *Store) CreateGitHubIssue(ctx context.Context, p GitHubIssue) error {
 	const q = `
-INSERT INTO github_issues (issue_number, issue_url, repo, title, page_url, selector, state)
-VALUES (?, ?, ?, ?, ?, ?, 'open')
+INSERT INTO github_issues (issue_number, issue_url, repo, title, page_url, selector, state, feedback_ids)
+VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
 ON CONFLICT DO NOTHING`
 	_, err := s.db.ExecContext(ctx, q,
-		p.IssueNumber, p.IssueURL, p.Repo, p.Title, p.PageURL, p.Selector,
+		p.IssueNumber, p.IssueURL, p.Repo, p.Title, p.PageURL, p.Selector, p.FeedbackIDs,
 	)
 	if err != nil {
 		return fmt.Errorf("store: create github issue: %w", err)
 	}
 	return nil
+}
+
+// GetGitHubIssueByNumber returns the most recent GitHub issue record for a
+// given issue number.
+func (s *Store) GetGitHubIssueByNumber(ctx context.Context, issueNumber int64) (GitHubIssue, error) {
+	const q = `
+SELECT id, issue_number, issue_url, repo, title, page_url, selector, state, created_at, synced_at, COALESCE(feedback_ids,'')
+FROM github_issues
+WHERE issue_number = ?
+ORDER BY id DESC LIMIT 1`
+
+	var gi GitHubIssue
+	var createdAt, syncedAt string
+	err := s.db.QueryRowContext(ctx, q, issueNumber).Scan(
+		&gi.ID, &gi.IssueNumber, &gi.IssueURL, &gi.Repo, &gi.Title,
+		&gi.PageURL, &gi.Selector, &gi.State, &createdAt, &syncedAt, &gi.FeedbackIDs,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return GitHubIssue{}, fmt.Errorf("store: github issue %d not found", issueNumber)
+	}
+	if err != nil {
+		return GitHubIssue{}, fmt.Errorf("store: get github issue by number: %w", err)
+	}
+	gi.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	gi.SyncedAt, _ = time.Parse(time.RFC3339, syncedAt)
+	return gi, nil
 }
 
 // ListOpenGitHubIssuesByURL returns all open GitHub issues recorded for a page URL.

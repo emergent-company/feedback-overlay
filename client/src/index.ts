@@ -11,6 +11,9 @@ import type { IssueBadge } from "./api";
 import { buildSelector } from "./selector";
 import { showIndicator, hideIndicator } from "./indicator";
 import { startRecording, getHistory } from "./history";
+import { getSessionId } from "./session";
+import { captureElement } from "./screenshot";
+import { captureSnapshot } from "./snapshot";
 
 (function bootstrap() {
   if ((window as any).__feedbackOverlayLoaded) return;
@@ -139,6 +142,8 @@ import { startRecording, getHistory } from "./history";
         openFeedbackDialog(rawHierarchy[idx].element);
       },
       onSubmit: async (comment, type: FeedbackType) => {
+        const screenshot = await captureElement(target);
+        const snapshot = captureSnapshot();
         const result = await api.createFeedback({
           url: window.location.href,
           selector,
@@ -147,6 +152,8 @@ import { startRecording, getHistory } from "./history";
           repo: config.repo,
           label: config.label,
           feedbackType: type,
+          screenshot,
+          snapshot,
         });
         // Refresh badges, return to active mode.
         await refreshBadges();
@@ -226,6 +233,30 @@ import { startRecording, getHistory } from "./history";
   }
 
   // ── Context collection ──────────────────────────────────────────────────────
+  function resolveTraceId(): string | undefined {
+    if (config.sessionId) return config.sessionId;
+    if (config.sessionIdSelector) {
+      try {
+        const el = document.querySelector(config.sessionIdSelector);
+        const text = el?.textContent?.trim();
+        if (text) return text;
+      } catch {
+        // invalid selector — ignore
+      }
+    }
+    const g = (window as any).__feedbackSessionId;
+    if (typeof g === "string" && g) return g;
+    if (typeof g === "function") {
+      try {
+        const v = g();
+        if (typeof v === "string" && v) return v;
+      } catch {
+        // ignore
+      }
+    }
+    return undefined;
+  }
+
   function gatherContext(el: Element): Record<string, unknown> {
     const rect = el.getBoundingClientRect();
     return {
@@ -247,6 +278,8 @@ import { startRecording, getHistory } from "./history";
       },
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
+      sessionId: getSessionId(),
+      traceId: resolveTraceId(),
       ...(config.branch  ? { branch: config.branch }   : {}),
       ...(config.version ? { appVersion: config.version } : {}),
       sessionHistory: getHistory(),

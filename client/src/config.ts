@@ -17,6 +17,10 @@ export interface OverlayConfig {
   branch?: string;
   /** App version being tested. Set via data-version on the <script> tag. */
   version?: string;
+  /** Static app session/trace ID injected server-side via data-session-id. */
+  sessionId?: string;
+  /** CSS selector to read a trace ID from the DOM via data-session-id-selector. */
+  sessionIdSelector?: string;
 }
 
 function getScriptTag(): HTMLScriptElement | null {
@@ -49,6 +53,8 @@ export function readConfig(): OverlayConfig {
 
   const branch = tag?.dataset.branch?.trim() || undefined;
   const version = tag?.dataset.version?.trim() || undefined;
+  const sessionId = tag?.dataset.sessionId?.trim() || undefined;
+  const sessionIdSelector = tag?.dataset.sessionIdSelector?.trim() || undefined;
 
-  return { apiBase, repo, label, hotkey, branch, version };
+  return { apiBase, repo, label, hotkey, branch, version, sessionId, sessionIdSelector };
 }

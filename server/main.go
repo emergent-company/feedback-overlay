@@ -139,17 +139,15 @@ func main() {
 	e.GET("/feedback", h.HandleListFeedback)
 	e.GET("/issues", h.HandleListIssues)
 
-	// Snapshot — public by secret token (rate-limited).
-	snapshotLimiter := middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(
-		rate.Limit(envFloatOr("SNAPSHOT_RATE_LIMIT_RPS", 5))))
-	e.GET("/snapshot/:id", h.HandleGetSnapshot, snapshotLimiter)
-
 	// Authenticated routes
 	auth := e.Group("", authmw.RequireAuth(jwtSecret))
 	auth.GET("/me", h.HandleMe)
 	auth.GET("/feedback/list", h.HandleListFeedbackByURL)
 	auth.GET("/feedback/:id", h.HandleGetFeedback)
 	auth.DELETE("/feedback/:id", h.HandleDeleteFeedback)
+	auth.GET("/api/keys", h.HandleListAPIKeys)
+	auth.POST("/api/keys", h.HandleCreateAPIKey)
+	auth.DELETE("/api/keys/:id", h.HandleRevokeAPIKey)
 
 	// Write endpoints are rate-limited per client IP to protect the SQLite DB and
 	// the upstream GitHub API from abuse. Export is stricter since it calls GitHub.
@@ -161,30 +159,28 @@ func main() {
 	auth.POST("/feedback", h.HandleCreateFeedback, feedbackLimiter)
 	auth.POST("/issue/export", h.HandleExportIssue, exportLimiter)
 
-	// ── MCP server (optional; enabled when MCP_API_KEY is set) ────────────────
-	if apiKey := os.Getenv("MCP_API_KEY"); apiKey != "" {
-		mcpSrv := h.MCPServer()
-		streamable := mcp.NewStreamableHTTPHandler(
-			func(_ *http.Request) *mcp.Server { return mcpSrv },
-			&mcp.StreamableHTTPOptions{
-				Stateless:    true,
-				JSONResponse: true,
-				// Disable localhost/DNS-rebinding protection: the server is
-				// reached through a trusted reverse proxy (traefik) on loopback,
-				// which preserves the public Host header and would otherwise
-				// trigger a 403. Bearer auth is the real gate.
-				DisableLocalhostProtection: true,
-			},
-		)
-		verify := func(_ context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
-			if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
-				return nil, mcpauth.ErrInvalidToken
-			}
-			return &mcpauth.TokenInfo{Scopes: []string{"mcp"}, Expiration: time.Now().Add(time.Hour)}, nil
+	// ── MCP server (API-key auth: DB keys scoped to repos, plus MCP_API_KEY bootstrap) ──
+	mcpSrv := h.MCPServer()
+	streamable := mcp.NewStreamableHTTPHandler(
+		func(_ *http.Request) *mcp.Server { return mcpSrv },
+		&mcp.StreamableHTTPOptions{
+			Stateless:                  true,
+			JSONResponse:               true,
+			DisableLocalhostProtection: true,
+		},
+	)
+	verify := func(ctx context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
+		if apiKey := os.Getenv("MCP_API_KEY"); apiKey != "" && subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) == 1 {
+			return &mcpauth.TokenInfo{Scopes: []string{"*"}, Expiration: time.Now().Add(time.Hour)}, nil
 		}
-		authed := mcpauth.RequireBearerToken(verify, nil)(streamable)
-		e.Any("/mcp", echo.WrapHandler(authed))
+		repos, err := h.VerifyAPIKey(ctx, token)
+		if err != nil || len(repos) == 0 {
+			return nil, mcpauth.ErrInvalidToken
+		}
+		return &mcpauth.TokenInfo{Scopes: repos, Expiration: time.Now().Add(time.Hour)}, nil
 	}
+	authed := mcpauth.RequireBearerToken(verify, nil)(streamable)
+	e.Any("/mcp", echo.WrapHandler(authed))
 
 	// ── Start ─────────────────────────────────────────────────────────────────
 	fmt.Printf("feedback-overlay %s (%s) listening on :%s\n", Version, Commit, port)

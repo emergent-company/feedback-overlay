@@ -28,8 +28,8 @@ func TestMigrateCreatesSchema(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != 2 {
-		t.Fatalf("schema version = %d, want 2", v)
+	if v != 3 {
+		t.Fatalf("schema version = %d, want 3", v)
 	}
 
 	if err := s.Close(); err != nil {
@@ -58,8 +58,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := s2.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != 2 {
-		t.Fatalf("schema version = %d, want 2", v)
+	if v != 3 {
+		t.Fatalf("schema version = %d, want 3", v)
 	}
 }
 

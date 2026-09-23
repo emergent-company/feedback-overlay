@@ -18,21 +18,20 @@ const (
 
 // Feedback is a single user-submitted feedback item.
 type Feedback struct {
-	ID             int64
-	URL            string
-	Selector       string
-	Comment        string
-	ContextJSON    string
-	Screenshot     []byte // may be nil
-	Snapshot       []byte // may be nil
-	SnapshotSecret string
-	SnapshotSize   int
-	GitHubUser     string
-	Repo           string
-	Label          string
-	Status         FeedbackStatus
-	IssueURL       string
-	CreatedAt      time.Time
+	ID           int64
+	URL          string
+	Selector     string
+	Comment      string
+	ContextJSON  string
+	Screenshot   []byte // may be nil
+	Snapshot     []byte // may be nil
+	SnapshotSize int
+	GitHubUser   string
+	Repo         string
+	Label        string
+	Status       FeedbackStatus
+	IssueURL     string
+	CreatedAt    time.Time
 }
 
 // URLSummary is a lightweight projection returned for badge rendering.
@@ -94,7 +93,7 @@ RETURNING id, created_at`
 func (s *Store) Get(ctx context.Context, id int64) (Feedback, error) {
 	const q = `
 SELECT id, url, selector, comment, context_json, screenshot, github_user, repo, label, status, COALESCE(issue_url,''), created_at,
-       COALESCE(snapshot_secret,''), COALESCE(snapshot_size,0), snapshot
+       COALESCE(snapshot_size,0), snapshot
 FROM feedback WHERE id = ?`
 
 	var f Feedback
@@ -102,7 +101,7 @@ FROM feedback WHERE id = ?`
 	err := s.db.QueryRowContext(ctx, q, id).Scan(
 		&f.ID, &f.URL, &f.Selector, &f.Comment, &f.ContextJSON,
 		&f.Screenshot, &f.GitHubUser, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt,
-		&f.SnapshotSecret, &f.SnapshotSize, &f.Snapshot,
+		&f.SnapshotSize, &f.Snapshot,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Feedback{}, fmt.Errorf("store: feedback %d not found", id)
@@ -211,15 +210,6 @@ func (s *Store) MarkExported(ctx context.Context, ids []int64, issueURL string) 
 		}
 	}
 	return tx.Commit()
-}
-
-// SetSnapshotSecret sets the retrieval secret for a feedback item's snapshot.
-func (s *Store) SetSnapshotSecret(ctx context.Context, id int64, secret string) error {
-	const q = `UPDATE feedback SET snapshot_secret = ? WHERE id = ?`
-	if _, err := s.db.ExecContext(ctx, q, secret, id); err != nil {
-		return fmt.Errorf("store: set snapshot secret: %w", err)
-	}
-	return nil
 }
 
 func splitCSV(s string) []string {

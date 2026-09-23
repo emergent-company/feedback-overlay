@@ -1,6 +1,6 @@
 # feedback-overlay — Context Enrichment Design
 
-Status: **v1 + v2 + v3 implemented**.
+Status: **v1 + v2 + v3 + P1 implemented**. P2 (panel UI) pending.
 
 ## Goal
 
@@ -74,10 +74,10 @@ regions. This is a best-effort aid, not pixel-truth.
 
 ---
 
-## v2 — Full DOM snapshot + secret key
+## v2 — Full DOM snapshot
 
-Do **not** put full HTML in the issue (noise, PII, bloat). Store server-side,
-embed a pointer.
+Do **not** put full HTML in the issue (noise, PII, bloat). Store server-side;
+retrieve via MCP.
 
 ### Capture
 
@@ -99,21 +99,20 @@ Full-page HTML leaks user data. Strip before storing:
 
 Cap gzipped size (~500 KB).
 
-### Secret model
+### Retrieval (no secret in the issue)
 
-- Secret is minted **at export time** (not feedback creation) — only exported
-  items get a secret. 24 random bytes, hex-encoded.
-- Stored **plaintext** in `feedback.snapshot_secret`. It is a high-entropy
-  capability token in the server's own DB; hashing adds little since the
-  snapshot BLOB is co-located. Verified with a constant-time compare.
-- Issue body embeds a markdown link plus a machine pointer:
-  `feedback://snapshot/<id>?secret=<secret>`.
-- Fetch path (v2): `GET /snapshot/:id?secret=<secret>` → gzipped snapshot,
-  rate-limited. MCP `get_snapshot` (v3) wraps the same handler.
+The snapshot is **never** referenced from the issue body — no secret, no
+pointer. Retrieval is authenticated by a **per-user API key**, scoped to one
+or more repos:
 
-Security note: in a **public** repo the secret is visible to anyone who can
-read the issue. Mitigation: require repo-scoped MCP auth **in addition to**
-the key, and/or give secrets a short TTL.
+- Key stored **hashed** (`sha256`) in `api_keys`; repo scope in
+  `api_key_repos`.
+- MCP tools authenticate via `Authorization: Bearer <key>`; the server checks
+  the feedback item's repo is within the key's scope.
+- `MCP_API_KEY` env remains as a bootstrap wildcard (`*`) fallback.
+
+Snapshot/screenshot/context are served only for **exported** feedback
+(`issue_url` set), scoped to the key's repos.
 
 ### Backlink
 
@@ -131,16 +130,18 @@ same binary, same auth surface.
 ### Tools
 
 ```
-feedback_get_context(feedback_id, secret)  → full context JSON + screenshot
-feedback_get_snapshot(feedback_id, secret) → redacted full DOM snapshot
-feedback_list_for_issue(issue_number)      → resolve issue → feedback IDs
+feedback_get_context(feedback_id)    → full context JSON
+feedback_get_screenshot(feedback_id) → base64 PNG
+feedback_get_snapshot(feedback_id)   → redacted full DOM snapshot
+feedback_list_for_issue(issue_number) → resolve issue → feedback IDs
 ```
 
 ### Auth
 
-MCP clients present the per-snapshot secret and/or a repo-scoped token
-(GitHub App installation token). "Only the agent reading the issue has the
-key" = secret embedded in the issue + hashed server-side check.
+MCP clients present `Authorization: Bearer <api-key>` — a DB-backed key scoped
+to repos, or the `MCP_API_KEY` bootstrap. The server verifies the key and
+checks each tool call's repo is within scope. No secret is ever embedded in an
+issue.
 
 ---
 
@@ -149,8 +150,8 @@ key" = secret embedded in the issue + hashed server-side check.
 | Version | Change |
 |---|---|
 | v1 | none — new fields ride in `context_json`; `screenshot` column already exists |
-| v2 | `feedback` + `snapshot BLOB`, `snapshot_secret TEXT`, `snapshot_size INT`; `github_issues` + `feedback_ids TEXT` |
-| v3 | none — MCP reads existing tables |
+| v2 | `feedback` + `snapshot BLOB`, `snapshot_size INT`; `github_issues` + `feedback_ids TEXT` (`snapshot_secret` legacy column, unused) |
+| v3 | `api_keys` + `api_key_repos` — per-user repo-scoped API keys |
 
 ---
 
@@ -158,12 +159,13 @@ key" = secret embedded in the issue + hashed server-side check.
 
 - Never capture `localStorage` values.
 - Redact sensitive input values (already done in `history.ts`; extend to snapshot).
-- Secrets are high-entropy capability tokens, verified constant-time; keys embedded in issues get TTL.
-- Full snapshots gated by key **and** repo-scoped auth.
+- API keys stored hashed only; repo-scoped; never embedded in issues.
+- Snapshot/screenshot/context served only for exported feedback, within the key's repo scope.
 
-## Open questions
+## Remaining
 
+- **P2**: user panel (`/panel`) for managing API keys — list user's repos
+  (GitHub OAuth), generate/rotate/revoke repo-scoped keys.
 - Snapshot storage: SQLite BLOB is fine to start; S3 when volume grows.
-- Secret TTL policy for public repos.
 - Whether `traceId` should also be sent as a GitHub issue label/tag for
   grouping (likely noise — keep it in context only).

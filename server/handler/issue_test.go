@@ -44,7 +44,7 @@ func TestBuildIssueContentSingle(t *testing.T) {
 		ContextJSON: string(ctxJSON),
 		GitHubUser:  "alice",
 	}}
-	title, body := buildIssueContent(items, "", nil, "")
+	title, body := buildIssueContent(items, "")
 
 	if title != "Feedback on button.foo" {
 		t.Fatalf("title = %q", title)
@@ -72,7 +72,7 @@ func TestBuildIssueContentMulti(t *testing.T) {
 		{ID: 1, URL: "https://app.example.com/", Selector: "div.a", Comment: "one", ContextJSON: string(ctxJSON), GitHubUser: "alice"},
 		{ID: 2, URL: "https://app.example.com/", Selector: "div.a", Comment: "two", ContextJSON: string(ctxJSON), GitHubUser: "bob"},
 	}
-	title, body := buildIssueContent(items, "", nil, "")
+	title, body := buildIssueContent(items, "")
 	if title != "Feedback: 2 comments on div.a" {
 		t.Fatalf("title = %q", title)
 	}

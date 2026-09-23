@@ -68,6 +68,23 @@ ALTER TABLE feedback ADD COLUMN snapshot_secret TEXT;
 ALTER TABLE feedback ADD COLUMN snapshot_size INTEGER;
 ALTER TABLE github_issues ADD COLUMN feedback_ids TEXT;
 `},
+	{3, "api_keys", `
+CREATE TABLE IF NOT EXISTS api_keys (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  github_user TEXT NOT NULL,
+  key_hash    TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  revoked_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS api_key_repos (
+  api_key_id  INTEGER NOT NULL,
+  repo        TEXT NOT NULL,
+  PRIMARY KEY (api_key_id, repo)
+);
+
+CREATE INDEX IF NOT EXISTS api_keys_user_idx ON api_keys(github_user);
+`},
 }
 
 // Store wraps the SQLite database connection.

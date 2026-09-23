@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/emergent-company/feedback-overlay/server/store"
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -15,17 +17,17 @@ func (h *Handler) MCPServer() *mcp.Server {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "feedback_get_snapshot",
-		Description: "Return the redacted full-page DOM snapshot for a feedback item, gated by its retrieval secret.",
+		Description: "Return the redacted full-page DOM snapshot for a feedback item; requires API-key authentication and repo scope.",
 	}, h.toolGetSnapshot)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "feedback_get_screenshot",
-		Description: "Return the element screenshot (base64 PNG) for a feedback item, gated by its retrieval secret.",
+		Description: "Return the element screenshot (base64 PNG) for a feedback item; requires API-key authentication and repo scope.",
 	}, h.toolGetScreenshot)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "feedback_get_context",
-		Description: "Return the captured context JSON for a feedback item, gated by its retrieval secret.",
+		Description: "Return the captured context JSON for a feedback item; requires API-key authentication and repo scope.",
 	}, h.toolGetContext)
 
 	mcp.AddTool(srv, &mcp.Tool{
@@ -36,18 +38,47 @@ func (h *Handler) MCPServer() *mcp.Server {
 	return srv
 }
 
-// retrievalInput is the shared input for secret-gated tools.
-type retrievalInput struct {
-	FeedbackID int64  `json:"feedback_id" jsonschema:"the feedback row id"`
-	Secret     string `json:"secret" jsonschema:"the retrieval secret from the issue body"`
+// scopedFeedback loads a feedback item and verifies it is exported and within
+// the caller's API-key repo scope.
+func (h *Handler) scopedFeedback(ctx context.Context, id int64) (store.Feedback, error) {
+	f, err := h.Store.Get(ctx, id)
+	if err != nil {
+		return store.Feedback{}, fmt.Errorf("feedback %d not found", id)
+	}
+	if f.IssueURL == "" {
+		return store.Feedback{}, fmt.Errorf("feedback %d not exported", id)
+	}
+	ti := auth.TokenInfoFromContext(ctx)
+	if ti == nil {
+		return store.Feedback{}, fmt.Errorf("unauthenticated")
+	}
+	if !repoInScope(f.Repo, ti.Scopes) {
+		return store.Feedback{}, fmt.Errorf("repo %s not in key scope", f.Repo)
+	}
+	return f, nil
+}
+
+// repoInScope reports whether a repo is covered by a key's scope.
+func repoInScope(repo string, scopes []string) bool {
+	for _, s := range scopes {
+		if s == repo || s == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+// feedbackIDInput is the input for feedback-scoped tools.
+type feedbackIDInput struct {
+	FeedbackID int64 `json:"feedback_id" jsonschema:"the feedback row id"`
 }
 
 type snapshotOutput struct {
 	HTML string `json:"html"`
 }
 
-func (h *Handler) toolGetSnapshot(ctx context.Context, _ *mcp.CallToolRequest, in retrievalInput) (*mcp.CallToolResult, snapshotOutput, error) {
-	f, err := h.authorizedFeedback(ctx, in.FeedbackID, in.Secret)
+func (h *Handler) toolGetSnapshot(ctx context.Context, _ *mcp.CallToolRequest, in feedbackIDInput) (*mcp.CallToolResult, snapshotOutput, error) {
+	f, err := h.scopedFeedback(ctx, in.FeedbackID)
 	if err != nil {
 		return nil, snapshotOutput{}, err
 	}
@@ -66,8 +97,8 @@ type screenshotOutput struct {
 	MediaType string `json:"media_type"`
 }
 
-func (h *Handler) toolGetScreenshot(ctx context.Context, _ *mcp.CallToolRequest, in retrievalInput) (*mcp.CallToolResult, screenshotOutput, error) {
-	f, err := h.authorizedFeedback(ctx, in.FeedbackID, in.Secret)
+func (h *Handler) toolGetScreenshot(ctx context.Context, _ *mcp.CallToolRequest, in feedbackIDInput) (*mcp.CallToolResult, screenshotOutput, error) {
+	f, err := h.scopedFeedback(ctx, in.FeedbackID)
 	if err != nil {
 		return nil, screenshotOutput{}, err
 	}
@@ -84,8 +115,8 @@ type contextOutput struct {
 	Context map[string]any `json:"context"`
 }
 
-func (h *Handler) toolGetContext(ctx context.Context, _ *mcp.CallToolRequest, in retrievalInput) (*mcp.CallToolResult, contextOutput, error) {
-	f, err := h.authorizedFeedback(ctx, in.FeedbackID, in.Secret)
+func (h *Handler) toolGetContext(ctx context.Context, _ *mcp.CallToolRequest, in feedbackIDInput) (*mcp.CallToolResult, contextOutput, error) {
+	f, err := h.scopedFeedback(ctx, in.FeedbackID)
 	if err != nil {
 		return nil, contextOutput{}, err
 	}
@@ -117,9 +148,16 @@ type listForIssueOutput struct {
 }
 
 func (h *Handler) toolListForIssue(ctx context.Context, _ *mcp.CallToolRequest, in issueInput) (*mcp.CallToolResult, listForIssueOutput, error) {
+	ti := auth.TokenInfoFromContext(ctx)
+	if ti == nil {
+		return nil, listForIssueOutput{}, fmt.Errorf("unauthenticated")
+	}
 	gi, err := h.Store.GetGitHubIssueByNumber(ctx, in.IssueNumber)
 	if err != nil {
 		return nil, listForIssueOutput{}, err
+	}
+	if !repoInScope(gi.Repo, ti.Scopes) {
+		return nil, listForIssueOutput{}, fmt.Errorf("repo %s not in key scope", gi.Repo)
 	}
 	var ids []int64
 	if gi.FeedbackIDs != "" {

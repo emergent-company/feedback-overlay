@@ -121,8 +121,11 @@ func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 	html := `<!DOCTYPE html><html><body><script>
 if(window.opener){
   window.opener.postMessage({type:'feedback_overlay_auth',token:` + string(tokJSON) + `,login:` + string(loginJSON) + `,avatar:` + string(avatarJSON) + `},` + string(targetJSON) + `);
+  window.close();
+}else{
+  document.cookie = "fo_panel_token=" + encodeURIComponent(` + string(tokJSON) + `) + "; path=/; samesite=lax; max-age=120";
+  window.location.replace("/panel");
 }
-window.close();
 </script></body></html>`
 
 	return c.HTML(http.StatusOK, html)

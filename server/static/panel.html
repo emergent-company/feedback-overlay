@@ -452,6 +452,12 @@
   function getUser() {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (e) { return null; }
   }
+  function readPanelTokenCookie() {
+    try {
+      var m = document.cookie.match(/(?:^|;\s*)fo_panel_token=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : null;
+    } catch (e) { return null; }
+  }
 
   // ── State ────────────────────────────────────────────────────────────────
   var state = {
@@ -897,6 +903,12 @@
 
   // ── Bootstrap ────────────────────────────────────────────────────────────
   function bootstrap() {
+    var cookieToken = readPanelTokenCookie();
+    if (cookieToken && !state.token) {
+      state.token = cookieToken;
+      try { localStorage.setItem(TOKEN_KEY, cookieToken); } catch (e) { /* ignore */ }
+      try { document.cookie = "fo_panel_token=; path=/; max-age=0"; } catch (e) { /* ignore */ }
+    }
     renderAuth();
     if (!state.token) return;
 

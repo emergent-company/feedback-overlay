@@ -123,7 +123,7 @@ func main() {
 	e.GET("/feedback-overlay.js", echo.WrapHandler(http.FileServer(http.FS(staticFS))))
 
 	// ── go-daisy static assets (CSS/JS) ───────────────────────────────────────
-	e.GET("/static/*", echo.WrapHandler(http.StripPrefix("/static/", staticfs.Handler("/"))))
+	e.GET("/static/*", echo.WrapHandler(staticfs.Handler("/static/")))
 
 	// ── Routes ────────────────────────────────────────────────────────────────
 	h := handler.New(s, ghCfg, jwtSecret)

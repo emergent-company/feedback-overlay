@@ -143,6 +143,21 @@ templ PanelPage() {
 						<ul id="keys-list" class="flex flex-col gap-3 p-5" aria-live="polite"></ul>
 					}
 				</div>
+
+				<!-- Reports (full width) -->
+				@ui.CardRaw("mt-6 border border-base-200 shadow-sm", "gap-0 p-0", nil) {
+					<div class="flex items-center justify-between gap-3 border-b border-base-200 px-5 py-4">
+						<div>
+							<h2 class="text-base font-semibold tracking-tight">Reports</h2>
+							<p class="mt-0.5 text-xs text-base-content/60">Feedback captured by the overlay. Select a report to preview it.</p>
+						</div>
+						@ui.Button(ui.ButtonProps{Type: ui.ButtonTypeButton, Variant: ui.ButtonGhost, Size: ui.ButtonSM, Attrs: templ.Attributes{"id": "reports-refresh"}}) {
+							Refresh
+						}
+					</div>
+					<div id="report-preview" class="hidden" role="region" aria-label="Report preview"></div>
+					<ul id="reports-list" class="flex flex-col gap-3 p-5" aria-live="polite"></ul>
+				}
 			</main>
 		</div>
 
@@ -191,7 +206,10 @@ templ PanelPage() {
 				reposError: null,
 				keys: [],
 				keysLoaded: false,
-				keysError: null
+				keysError: null,
+				reports: [],
+				reportsLoaded: false,
+				reportsError: null
 			};
 			var selected = {};
 
@@ -303,13 +321,21 @@ templ PanelPage() {
 				state.user = null;
 				state.repos = [];
 				state.keys = [];
+				state.reports = [];
 				state.reposLoaded = false;
 				state.keysLoaded = false;
+				state.reportsLoaded = false;
 				state.reposError = null;
 				state.keysError = null;
+				state.reportsError = null;
 				selected = {};
 				var reveal = byId("reveal");
 				if (reveal) reveal.classList.add("hidden");
+				var preview = byId("report-preview");
+				if (preview) {
+					preview.classList.add("hidden");
+					clear(preview);
+				}
 				var filter = byId("repo-filter");
 				if (filter) filter.value = "";
 				renderAuth();
@@ -649,6 +675,317 @@ templ PanelPage() {
 				});
 			}
 
+			// ── Reports ──────────────────────────────────────────────────────
+			function snippet(value, max) {
+				var s = value == null ? "" : String(value);
+				s = s.split("\n").join(" ").split("\t").join(" ").trim();
+				if (s.length <= max) return s;
+				return s.slice(0, max - 1) + "...";
+			}
+
+			function isObj(v) {
+				return v !== null && typeof v === "object";
+			}
+
+			function textOf(v) {
+				if (v == null) return "";
+				if (typeof v === "string") return v;
+				try { return JSON.stringify(v); } catch (e) { return String(v); }
+			}
+
+			function safeStringify(v) {
+				try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); }
+			}
+
+			function noticeDiv(text, kind) {
+				var d = makeEl("div", "px-5 py-4 text-sm " + (kind === "error" ? "text-error" : "text-base-content/50"));
+				d.textContent = text;
+				return d;
+			}
+
+			function reportsMessage(text, kind) {
+				var li = makeEl("li", "py-6 text-center text-sm " + (kind === "error" ? "text-error" : "text-base-content/50"));
+				li.textContent = text;
+				return li;
+			}
+
+			function loadReports() {
+				state.reportsLoaded = false;
+				state.reportsError = null;
+				var list = byId("reports-list");
+				if (!list) return;
+				clear(list);
+				var li = makeEl("li", "flex items-center gap-2 py-6 text-sm text-base-content/50");
+				li.appendChild(makeEl("span", "loading loading-spinner loading-sm"));
+				var span = makeEl("span");
+				span.textContent = "Loading reports...";
+				li.appendChild(span);
+				list.appendChild(li);
+
+				api("/api/reports").then(function (reports) {
+					state.reports = Array.isArray(reports) ? reports : [];
+					state.reportsLoaded = true;
+				}).catch(function (err) {
+					state.reports = [];
+					state.reportsLoaded = true;
+					state.reportsError = err.message;
+				}).then(function () {
+					renderReports();
+				});
+			}
+
+			function renderReports() {
+				var list = byId("reports-list");
+				if (!list) return;
+				clear(list);
+
+				if (state.reportsError) {
+					list.appendChild(reportsMessage("Could not load reports. " + state.reportsError, "error"));
+					return;
+				}
+				if (!state.reports.length) {
+					list.appendChild(reportsMessage("No reports yet.", "empty"));
+					return;
+				}
+
+				for (var i = 0; i < state.reports.length; i++) {
+					list.appendChild(reportRow(state.reports[i]));
+				}
+			}
+
+			function reportRow(report) {
+				var li = makeEl("li", "flex items-start justify-between gap-4 rounded-xl border border-base-200 p-4");
+
+				var main = makeEl("div", "min-w-0 flex-1");
+				var head = makeEl("div", "flex flex-wrap items-center gap-2");
+				if (report.repo) {
+					var chip = makeEl("span", "badge badge-sm badge-ghost font-mono");
+					chip.textContent = report.repo;
+					head.appendChild(chip);
+				}
+				if (report.selector) {
+					var sel = makeEl("code", "max-w-full truncate font-mono text-xs text-base-content/70");
+					sel.textContent = report.selector;
+					sel.title = report.selector;
+					head.appendChild(sel);
+				}
+				main.appendChild(head);
+
+				var p = makeEl("p", "mt-2 text-sm text-base-content/80");
+				p.textContent = snippet(report.comment, 160) || "(no comment)";
+				main.appendChild(p);
+
+				var meta = makeEl("div", "mt-2 text-xs text-base-content/50");
+				meta.textContent = "Created " + fmtDate(report.created_at);
+				main.appendChild(meta);
+
+				var side = makeEl("div", "flex flex-col items-end gap-2");
+				var preview = makeEl("button", "btn btn-ghost btn-xs", { "type": "button", "aria-label": "Preview report " + report.id });
+				preview.textContent = "Preview";
+				preview.addEventListener("click", function () { openReport(report.id); });
+				side.appendChild(preview);
+				if (report.issue_url) {
+					var issueLink = makeEl("a", "link link-primary text-xs", { "href": report.issue_url, "target": "_blank", "rel": "noopener noreferrer", "aria-label": "Open GitHub issue for report " + report.id });
+					issueLink.textContent = "Issue";
+					side.appendChild(issueLink);
+				}
+				li.appendChild(main);
+				li.appendChild(side);
+				return li;
+			}
+
+			function openReport(id) {
+				var panel = byId("report-preview");
+				if (!panel) return;
+				clear(panel);
+				var loading = makeEl("div", "flex items-center gap-2 border-b border-base-200 px-5 py-4 text-sm text-base-content/50");
+				loading.appendChild(makeEl("span", "loading loading-spinner loading-sm"));
+				var span = makeEl("span");
+				span.textContent = "Loading report...";
+				loading.appendChild(span);
+				panel.appendChild(loading);
+				panel.classList.remove("hidden");
+				if (panel.scrollIntoView) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+				api("/api/reports/" + encodeURIComponent(id)).then(function (data) {
+					renderReportPreview(data);
+				}).catch(function (err) {
+					clear(panel);
+					panel.appendChild(noticeDiv("Could not load report. " + err.message, "error"));
+					toast("Could not load report: " + err.message, "error");
+				});
+			}
+
+			function formatViewport(vp) {
+				if (vp == null) return "";
+				if (typeof vp === "string" || typeof vp === "number") return String(vp);
+				if (isObj(vp) && vp.width != null && vp.height != null) return vp.width + " x " + vp.height;
+				return textOf(vp);
+			}
+
+			function formatHistory(history) {
+				if (history == null) return "";
+				if (Array.isArray(history)) {
+					var out = history.length + (history.length === 1 ? " entry" : " entries");
+					if (history.length) {
+						var last = history[history.length - 1];
+						var lastText = typeof last === "string" ? last : textOf(last);
+						lastText = snippet(lastText, 60);
+						if (lastText) out += " - last: " + lastText;
+					}
+					return out;
+				}
+				return textOf(history);
+			}
+
+			function contextRow(grid, label, value) {
+				var text = value == null ? "" : String(value);
+				if (!text) return;
+				var row = makeEl("div", "min-w-0");
+				var k = makeEl("div", "text-xs text-base-content/40");
+				k.textContent = label;
+				var v = makeEl("div", "truncate text-sm text-base-content/80");
+				v.textContent = text;
+				v.title = text;
+				row.appendChild(k);
+				row.appendChild(v);
+				grid.appendChild(row);
+			}
+
+			function contextSection(ctx) {
+				var section = makeEl("div", "mt-4");
+				var label = makeEl("div", "mb-2 text-xs font-medium uppercase tracking-wide text-base-content/40");
+				label.textContent = "Context";
+				section.appendChild(label);
+
+				if (!isObj(ctx)) {
+					var none = makeEl("p", "text-sm text-base-content/50");
+					none.textContent = "No context captured.";
+					section.appendChild(none);
+					return section;
+				}
+
+				var grid = makeEl("div", "grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2");
+				contextRow(grid, "URL", ctx.url);
+				contextRow(grid, "Viewport", formatViewport(ctx.viewport));
+				contextRow(grid, "CSS framework", ctx.cssFramework);
+				contextRow(grid, "User agent", ctx.userAgent);
+				contextRow(grid, "Data component", ctx.dataComponent);
+				contextRow(grid, "Session history", formatHistory(ctx.sessionHistory));
+				section.appendChild(grid);
+
+				var raw = makeEl("details", "mt-3 text-xs");
+				var sum = makeEl("summary", "cursor-pointer text-base-content/50");
+				sum.textContent = "Raw context JSON";
+				raw.appendChild(sum);
+				var pre = makeEl("pre", "mt-2 max-h-64 overflow-auto rounded-lg bg-base-300/40 p-3 font-mono text-xs text-base-content/80");
+				pre.textContent = safeStringify(ctx);
+				raw.appendChild(pre);
+				section.appendChild(raw);
+				return section;
+			}
+
+			function snapshotSection(snapshotHtml) {
+				var section = makeEl("div", "p-5");
+				var details = makeEl("details", "text-sm");
+				var sum = makeEl("summary", "cursor-pointer text-base-content/60");
+				sum.textContent = "Full-page snapshot";
+				details.appendChild(sum);
+				var note = makeEl("p", "mt-2 text-xs text-base-content/40");
+				note.textContent = "Rendered in a sandboxed frame. Scripts are disabled.";
+				details.appendChild(note);
+				// srcdoc is set via setAttribute so the snapshot HTML is treated as
+				// the frame's document, not interpolated into markup.
+				var frame = makeEl("iframe", "mt-2 h-[400px] w-full rounded-lg border border-base-200 bg-white", { "sandbox": "", "title": "Captured page snapshot", "loading": "lazy" });
+				frame.setAttribute("srcdoc", snapshotHtml);
+				details.appendChild(frame);
+				section.appendChild(details);
+				return section;
+			}
+
+			function renderReportPreview(data) {
+				var panel = byId("report-preview");
+				if (!panel) return;
+				clear(panel);
+
+				var wrap = makeEl("div", "border-b border-base-200 bg-base-200/30 p-5");
+
+				var head = makeEl("div", "flex flex-wrap items-start justify-between gap-3");
+				var titleWrap = makeEl("div", "min-w-0");
+				var title = makeEl("h3", "text-sm font-semibold");
+				title.textContent = "Report #" + data.id;
+				titleWrap.appendChild(title);
+				var sub = makeEl("div", "mt-1 flex flex-wrap items-center gap-2");
+				if (data.repo) {
+					var chip = makeEl("span", "badge badge-sm badge-ghost font-mono");
+					chip.textContent = data.repo;
+					sub.appendChild(chip);
+				}
+				if (data.selector) {
+					var sel = makeEl("code", "truncate font-mono text-xs text-base-content/70");
+					sel.textContent = data.selector;
+					sel.title = data.selector;
+					sub.appendChild(sel);
+				}
+				titleWrap.appendChild(sub);
+				head.appendChild(titleWrap);
+
+				var actions = makeEl("div", "flex items-center gap-2");
+				if (data.issue_url) {
+					var issueLink = makeEl("a", "btn btn-ghost btn-xs", { "href": data.issue_url, "target": "_blank", "rel": "noopener noreferrer" });
+					issueLink.textContent = "View issue on GitHub";
+					actions.appendChild(issueLink);
+				}
+				var dismiss = makeEl("button", "btn btn-ghost btn-xs", { "type": "button", "aria-label": "Dismiss report preview" });
+				dismiss.textContent = "Dismiss";
+				dismiss.addEventListener("click", function () {
+					panel.classList.add("hidden");
+					clear(panel);
+				});
+				actions.appendChild(dismiss);
+				head.appendChild(actions);
+				wrap.appendChild(head);
+
+				if (data.comment) {
+					var comment = makeEl("p", "mt-3 whitespace-pre-wrap text-sm text-base-content/80");
+					comment.textContent = data.comment;
+					wrap.appendChild(comment);
+				}
+
+				var meta = makeEl("div", "mt-2 text-xs text-base-content/50");
+				meta.textContent = "Created " + fmtDate(data.created_at);
+				wrap.appendChild(meta);
+
+				if (data.url) {
+					var urlP = makeEl("p", "mt-3 text-xs text-base-content/60");
+					var urlLabel = makeEl("span", "text-base-content/40");
+					urlLabel.textContent = "Page: ";
+					urlP.appendChild(urlLabel);
+					var pageLink = makeEl("a", "link link-primary break-all", { "href": data.url, "target": "_blank", "rel": "noopener noreferrer" });
+					pageLink.textContent = data.url;
+					urlP.appendChild(pageLink);
+					wrap.appendChild(urlP);
+				}
+
+				wrap.appendChild(contextSection(data.context));
+				panel.appendChild(wrap);
+
+				if (data.has_screenshot && data.screenshot) {
+					var shotWrap = makeEl("div", "border-b border-base-200 p-5");
+					var shotHead = makeEl("div", "mb-2 text-xs font-medium uppercase tracking-wide text-base-content/40");
+					shotHead.textContent = "Screenshot";
+					shotWrap.appendChild(shotHead);
+					var img = makeEl("img", "w-full rounded-lg border border-base-200", { "alt": "Screenshot of the captured page" });
+					img.src = "data:image/png;base64," + data.screenshot;
+					shotWrap.appendChild(img);
+					panel.appendChild(shotWrap);
+				}
+
+				if (data.has_snapshot && data.snapshot) {
+					panel.appendChild(snapshotSection(data.snapshot));
+				}
+			}
+
 			// ── Bootstrap + events ───────────────────────────────────────────
 			function bootstrap() {
 				renderAuth();
@@ -659,6 +996,7 @@ templ PanelPage() {
 					renderAuth();
 					loadRepos();
 					loadKeys();
+					loadReports();
 				}).catch(function () {});
 			}
 
@@ -671,6 +1009,9 @@ templ PanelPage() {
 
 				var refresh = byId("refresh");
 				if (refresh) refresh.addEventListener("click", loadKeys);
+
+				var reportsRefresh = byId("reports-refresh");
+				if (reportsRefresh) reportsRefresh.addEventListener("click", loadReports);
 
 				var reload = byId("reload-repos");
 				if (reload) reload.addEventListener("click", loadRepos);
@@ -728,7 +1069,13 @@ templ PanelPage() {
 					state.user = { login: data.login || "", avatar: data.avatar || "" };
 					state.reposLoaded = false;
 					state.keysLoaded = false;
+					state.reportsLoaded = false;
 					selected = {};
+					var preview = byId("report-preview");
+					if (preview) {
+						preview.classList.add("hidden");
+						clear(preview);
+					}
 					toast("Signed in as " + (data.login || "GitHub user") + ".");
 					bootstrap();
 				});

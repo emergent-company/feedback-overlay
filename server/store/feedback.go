@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -176,6 +177,41 @@ ORDER BY selector`
 		summaries = append(summaries, s)
 	}
 	return summaries, rows.Err()
+}
+
+// ListExported returns exported feedback items (issue_url set) whose repo is
+// in the given list, newest first, capped.
+func (s *Store) ListExported(ctx context.Context, repos []string) ([]Feedback, error) {
+	if len(repos) == 0 {
+		return nil, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(repos)), ",")
+	args := make([]any, 0, len(repos))
+	for _, r := range repos {
+		args = append(args, r)
+	}
+	q := fmt.Sprintf(`
+SELECT id, url, selector, comment, repo, label, status, COALESCE(issue_url,''), created_at
+FROM feedback
+WHERE issue_url != '' AND repo IN (%s)
+ORDER BY id DESC LIMIT 500`, ph)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: list exported: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Feedback
+	for rows.Next() {
+		var f Feedback
+		var createdAt string
+		if err := rows.Scan(&f.ID, &f.URL, &f.Selector, &f.Comment, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt); err != nil {
+			return nil, fmt.Errorf("store: scan exported: %w", err)
+		}
+		f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }
 
 // Delete removes a feedback item by ID. Returns an error if the item doesn't

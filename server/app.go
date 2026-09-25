@@ -105,6 +105,8 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 	auth.POST("/api/keys", h.HandleCreateAPIKey)
 	auth.DELETE("/api/keys/:id", h.HandleRevokeAPIKey)
 	auth.GET("/api/repos", h.HandleListRepos)
+	auth.GET("/api/reports", h.HandleListReports)
+	auth.GET("/api/reports/:id", h.HandleGetReport)
 
 	// Write endpoints are rate-limited per client IP to protect the SQLite DB and
 	// the upstream GitHub API from abuse. Export is stricter since it calls GitHub.

@@ -17,7 +17,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const apiBase = "https://api.github.com"
+var apiBase = "https://api.github.com"
+
+// SetBaseURLForTesting overrides the GitHub API base URL (for tests).
+func SetBaseURLForTesting(base string) { apiBase = base }
 
 // httpClient is the shared HTTP client for all GitHub API calls.
 // Timeout prevents a hung upstream from blocking a request forever.

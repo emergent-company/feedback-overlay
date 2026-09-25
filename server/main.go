@@ -24,6 +24,7 @@ import (
 )
 
 //go:embed static/feedback-overlay.js
+//go:embed static/panel.html
 var staticFiles embed.FS
 
 // Version and Commit are injected at build time via -ldflags.
@@ -119,6 +120,12 @@ func main() {
 	staticFS, _ := fs.Sub(staticFiles, "static")
 	e.GET("/feedback-overlay.js", echo.WrapHandler(http.FileServer(http.FS(staticFS))))
 
+	// ── Static: serve the user panel ──────────────────────────────────────────
+	panelHTML, _ := staticFiles.ReadFile("static/panel.html")
+	e.GET("/panel", func(c echo.Context) error {
+		return c.Blob(http.StatusOK, "text/html; charset=utf-8", panelHTML)
+	})
+
 	// ── Routes ────────────────────────────────────────────────────────────────
 	h := handler.New(s, ghCfg, jwtSecret)
 
@@ -148,6 +155,7 @@ func main() {
 	auth.GET("/api/keys", h.HandleListAPIKeys)
 	auth.POST("/api/keys", h.HandleCreateAPIKey)
 	auth.DELETE("/api/keys/:id", h.HandleRevokeAPIKey)
+	auth.GET("/api/repos", h.HandleListRepos)
 
 	// Write endpoints are rate-limited per client IP to protect the SQLite DB and
 	// the upstream GitHub API from abuse. Export is stricter since it calls GitHub.

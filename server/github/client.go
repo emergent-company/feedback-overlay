@@ -195,6 +195,35 @@ func GetUser(ctx context.Context, accessToken string) (User, error) {
 	return u, nil
 }
 
+// Repo is a minimal GitHub repository.
+type Repo struct {
+	FullName string `json:"full_name"`
+	Name     string `json:"name"`
+	Private  bool   `json:"private"`
+}
+
+// ListUserRepos lists the repositories the access token's user can access.
+func ListUserRepos(ctx context.Context, accessToken string) ([]Repo, error) {
+	url := apiBase + "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("github: list user repos: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github: list user repos: status %d", resp.StatusCode)
+	}
+	var repos []Repo
+	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		return nil, fmt.Errorf("github: decode repos: %w", err)
+	}
+	return repos, nil
+}
+
 // CreateIssueParams holds the data for creating a GitHub issue.
 type CreateIssueParams struct {
 	Repo   string // "owner/repo"

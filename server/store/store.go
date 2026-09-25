@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS api_key_repos (
 
 CREATE INDEX IF NOT EXISTS api_keys_user_idx ON api_keys(github_user);
 `},
+	{4, "user_tokens", `
+CREATE TABLE IF NOT EXISTS user_tokens (
+  github_user     TEXT PRIMARY KEY,
+  token_encrypted BLOB NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+`},
 }
 
 // Store wraps the SQLite database connection.

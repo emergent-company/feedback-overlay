@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>feedback-overlay · API keys</title>
+<style>
+  :root{
+    --bg:#f6f6f4;
+    --surface:#ffffff;
+    --surface-2:#fafaf8;
+    --ink:#17191d;
+    --ink-2:#5f6570;
+    --ink-3:#8b909b;
+    --line:#e7e7e3;
+    --line-strong:#d6d6d0;
+    --accent:#2f57d6;
+    --accent-hover:#2546b8;
+    --accent-soft:#eef2ff;
+    --accent-line:#cdd8ff;
+    --danger:#c0392b;
+    --danger-soft:#fdecea;
+    --danger-line:#f3c9c2;
+    --ok:#1a7f4b;
+    --radius:12px;
+    --shadow-sm:0 1px 2px rgba(20,20,25,.05);
+    --shadow:0 1px 2px rgba(20,20,25,.04), 0 10px 30px -16px rgba(20,20,25,.22);
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:radial-gradient(circle at 1px 1px, rgba(20,20,25,.055) 1px, transparent 0);
+    background-size:22px 22px;
+    -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,.75), transparent 62%);
+            mask-image:linear-gradient(to bottom, rgba(0,0,0,.75), transparent 62%);
+  }
+  #gate,#app{position:relative; z-index:1}
+
+  h1,h2,h3,p{margin:0}
+  a{color:var(--accent)}
+  button{font:inherit}
+
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:6px}
+
+  .skip{
+    position:absolute; left:-9999px; top:0; z-index:50;
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:8px;
+    padding:8px 12px; box-shadow:var(--shadow);
+  }
+  .skip:focus{left:12px; top:12px}
+
+  /* ── Brand ─────────────────────────────────────────────────────────────── */
+  .brand{display:inline-flex; align-items:center; gap:9px}
+  .brand-mark{
+    width:22px; height:22px; border-radius:7px; flex:none;
+    background:linear-gradient(140deg,#3b66f0,#2546b8);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 1px 2px rgba(20,20,25,.2);
+    position:relative;
+  }
+  .brand-mark::after{
+    content:""; position:absolute; left:6px; top:6px; width:10px; height:10px;
+    border-radius:3px 3px 3px 1px; background:#fff; opacity:.92;
+  }
+  .brand-name{font-weight:600; letter-spacing:-.01em; font-size:14.5px}
+
+  /* ── Buttons ───────────────────────────────────────────────────────────── */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:14px; font-weight:500; line-height:1; letter-spacing:.005em;
+    padding:9px 14px; border-radius:9px; border:1px solid transparent;
+    background:transparent; color:var(--ink); cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, color .15s ease, transform .06s ease, box-shadow .15s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:translateY(.5px)}
+  .btn[disabled]{opacity:.5; cursor:not-allowed; transform:none}
+  .btn-primary{background:var(--accent); color:#fff; box-shadow:0 1px 2px rgba(37,70,184,.35)}
+  .btn-primary:hover:not([disabled]){background:var(--accent-hover)}
+  .btn-ghost{background:var(--surface); border-color:var(--line-strong); color:var(--ink-2)}
+  .btn-ghost:hover:not([disabled]){border-color:var(--ink-3); color:var(--ink)}
+  .btn-danger{background:var(--surface); border-color:var(--danger-line); color:var(--danger)}
+  .btn-danger:hover:not([disabled]){background:var(--danger-soft); border-color:var(--danger)}
+  .btn-sm{padding:6px 10px; font-size:13px; border-radius:8px}
+  .btn-block{width:100%}
+  .btn svg{flex:none}
+
+  .linkbtn{
+    background:none; border:0; padding:2px 4px; margin:0; cursor:pointer;
+    color:var(--accent); font-size:13px; font-weight:500; border-radius:6px;
+  }
+  .linkbtn:hover{text-decoration:underline}
+  .linkbtn[disabled]{color:var(--ink-3); cursor:default; text-decoration:none}
+
+  /* ── Signed-out gate ───────────────────────────────────────────────────── */
+  .gate{min-height:100%; display:grid; place-items:center; padding:40px 20px}
+  .gate-card{
+    width:100%; max-width:400px;
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:32px 28px 26px; box-shadow:var(--shadow);
+  }
+  .gate-card h1{font-size:19px; letter-spacing:-.015em; margin:22px 0 6px}
+  .gate-card .lede{color:var(--ink-2); font-size:13.5px; margin-bottom:22px}
+  .fineprint{color:var(--ink-3); font-size:12px; margin-top:16px; line-height:1.5}
+  .gate .brand{margin-bottom:2px}
+
+  /* ── Signed-in shell ───────────────────────────────────────────────────── */
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    background:rgba(255,255,255,.82); backdrop-filter:saturate(180%) blur(10px);
+    -webkit-backdrop-filter:saturate(180%) blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar-inner{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    height:56px;
+  }
+  .user{display:flex; align-items:center; gap:10px; min-width:0}
+  .avatar{
+    width:28px; height:28px; border-radius:50%; flex:none;
+    background:var(--surface-2); border:1px solid var(--line); object-fit:cover;
+  }
+  .login{font-size:13.5px; font-weight:500; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px}
+
+  .wrap{width:100%; max-width:1040px; margin:0 auto; padding:0 24px}
+  .page{padding-top:34px; padding-bottom:72px}
+  .page-head{max-width:640px; margin-bottom:26px}
+  .page-head h1{font-size:24px; letter-spacing:-.025em; font-weight:650}
+  .page-head .lede{color:var(--ink-2); font-size:14px; margin-top:7px}
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  .grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:20px; align-items:start}
+  @media (max-width:880px){ .grid{grid-template-columns:minmax(0,1fr)} }
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    box-shadow:var(--shadow-sm); overflow:hidden;
+  }
+  .card-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:16px 18px; border-bottom:1px solid var(--line);
+  }
+  .card-head h2{font-size:14.5px; font-weight:600; letter-spacing:-.01em}
+  .card-head .hint{color:var(--ink-3); font-size:12.5px; margin-top:3px}
+  .card-body{padding:16px 18px}
+  .card-foot{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-top:1px solid var(--line); background:var(--surface-2);
+  }
+
+  /* ── Repo picker ───────────────────────────────────────────────────────── */
+  .repo-tools{
+    display:flex; align-items:center; gap:8px;
+    padding:12px 18px; border-bottom:1px solid var(--line);
+  }
+  .repo-tools .input{flex:1}
+  .input{
+    width:100%; font:inherit; font-size:13.5px; color:var(--ink);
+    background:var(--surface-2); border:1px solid var(--line-strong);
+    border-radius:8px; padding:8px 11px;
+  }
+  .input::placeholder{color:var(--ink-3)}
+  .input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+
+  .repo-scroll{max-height:340px; overflow-y:auto; padding:8px; scrollbar-width:thin}
+  .repo-scroll::-webkit-scrollbar{width:10px}
+  .repo-scroll::-webkit-scrollbar-thumb{background:var(--line-strong); border:3px solid var(--surface); border-radius:999px}
+
+  .owner-label{
+    font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-3); padding:10px 10px 6px;
+  }
+  .owner-group + .owner-group{margin-top:4px}
+
+  .repo{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; border-radius:8px; cursor:pointer;
+    transition:background .12s ease;
+  }
+  .repo:hover{background:var(--surface-2)}
+  .repo:has(input:checked){background:var(--accent-soft)}
+  .repo input{
+    width:16px; height:16px; flex:none; margin:0;
+    accent-color:var(--accent); cursor:pointer;
+  }
+  .repo-name{font-family:var(--mono); font-size:13px; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .repo-name .owner{color:var(--ink-3)}
+  .repo-spacer{flex:1}
+
+  .badge{
+    display:inline-flex; align-items:center; gap:4px; flex:none;
+    font-size:11px; font-weight:500; line-height:1;
+    padding:4px 7px; border-radius:999px;
+    border:1px solid var(--line); background:var(--surface-2); color:var(--ink-3);
+  }
+  .badge svg{width:11px; height:11px}
+  .badge-private{color:#8a5a1a; background:#fdf5e6; border-color:#f0e0bd}
+  .badge-revoked{color:var(--danger); background:var(--danger-soft); border-color:var(--danger-line)}
+
+  .sel-count{font-size:13px; color:var(--ink-2); font-variant-numeric:tabular-nums}
+
+  /* ── Key list ──────────────────────────────────────────────────────────── */
+  .keys-list{list-style:none; margin:0; padding:16px 18px; display:flex; flex-direction:column; gap:10px}
+  .key-item{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+    padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface);
+  }
+  .key-item.revoked{background:var(--surface-2); opacity:.72}
+  .key-main{min-width:0; flex:1}
+  .key-chips{display:flex; flex-wrap:wrap; gap:6px}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:12px; line-height:1;
+    padding:4px 9px; border-radius:999px;
+    background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2);
+  }
+  .key-item.revoked .chip{text-decoration:line-through; text-decoration-color:var(--line-strong)}
+  .key-meta{font-size:12px; color:var(--ink-3); margin-top:8px}
+  .key-side{display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:none}
+  .key-id{font-family:var(--mono); font-size:11px; color:var(--ink-3)}
+
+  /* ── Inline status / empty / error ─────────────────────────────────────── */
+  .status-inline{
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; color:var(--ink-3); padding:14px 18px;
+  }
+  .status-inline.error{color:var(--danger)}
+  .status-inline.empty{padding:26px 18px; justify-content:center; text-align:center; flex-direction:column}
+  .status-inline .spinner{
+    width:14px; height:14px; flex:none; border-radius:50%;
+    border:2px solid var(--line-strong); border-top-color:var(--accent);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── One-time key reveal ───────────────────────────────────────────────── */
+  .reveal{
+    border:1px solid var(--accent-line); border-radius:14px;
+    background:linear-gradient(180deg,#f7f9ff,#ffffff 70%);
+    box-shadow:var(--shadow); padding:18px; margin-bottom:22px;
+  }
+  .reveal-head{display:flex; align-items:center; gap:9px; font-weight:600; font-size:14.5px; letter-spacing:-.01em}
+  .reveal-head .dot{width:8px; height:8px; border-radius:50%; background:var(--ok); flex:none}
+  .reveal p.note{color:var(--ink-2); font-size:13px; margin-top:6px}
+  .key-code-row{display:flex; gap:10px; margin-top:14px; align-items:stretch}
+  .key-code{
+    flex:1; min-width:0; font-family:var(--mono); font-size:13px; line-height:1.5;
+    background:#12172a; color:#dbe4ff; border-radius:9px; padding:12px 14px;
+    word-break:break-all; user-select:all;
+  }
+  .key-code-row .btn{background:#12172a; color:#fff; border-color:#12172a}
+  .key-code-row .btn:hover:not([disabled]){background:#1b2240; border-color:#1b2240}
+  .warn{
+    display:flex; gap:8px; align-items:flex-start;
+    margin-top:12px; font-size:12.5px; color:#8a5a1a;
+  }
+  .warn svg{flex:none; margin-top:1px}
+
+  .reveal-close{margin-left:auto}
+
+  /* ── Toast ─────────────────────────────────────────────────────────────── */
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(8px);
+    z-index:60; max-width:min(92vw,460px);
+    background:#17191d; color:#f2f3f5;
+    font-size:13.5px; line-height:1.45;
+    padding:11px 16px; border-radius:10px;
+    box-shadow:0 12px 34px -10px rgba(20,20,25,.55);
+    opacity:0; transition:opacity .2s ease, transform .2s ease;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast.error{background:#7c2016; color:#fff0ee}
+
+  /* ── Motion ────────────────────────────────────────────────────────────── */
+  @keyframes rise{from{opacity:0; transform:translateY(9px)} to{opacity:1; transform:none}}
+  .rise{animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+  .d1{animation-delay:.04s}
+  .d2{animation-delay:.09s}
+  .d3{animation-delay:.14s}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  @media (max-width:560px){
+    .wrap{padding:0 16px}
+    .page{padding-top:26px}
+    .login{max-width:110px}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ────────────────────────────────────────────────────────────────────────
+     Signed-out gate
+     ──────────────────────────────────────────────────────────────────────── -->
+<div id="gate" class="gate" hidden>
+  <main class="gate-card rise">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">feedback-overlay</span>
+    </div>
+    <h1>API keys</h1>
+    <p class="lede">Sign in with GitHub to create keys that let an agent read feedback for the repositories you choose.</p>
+    <button id="signin" class="btn btn-primary btn-block" type="button">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+      </svg>
+      Sign in with GitHub
+    </button>
+    <p class="fineprint">A key grants scoped access to feedback data only. You can revoke one at any time.</p>
+  </main>
+</div>
+
+<!-- ────────────────────────────────────────────────────────────────────────
+     Signed-in panel
+     ──────────────────────────────────────────────────────────────────────── -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">feedback-overlay</span>
+      </div>
+      <div class="user">
+        <img id="avatar" class="avatar" alt="" width="28" height="28">
+        <span id="login" class="login"></span>
+        <button id="signout" class="btn btn-ghost btn-sm" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap page">
+    <div class="page-head rise">
+      <h1>API keys</h1>
+      <p class="lede">Create keys for agents that read feedback. Each key is limited to the repositories you select, and the plaintext value is shown only once.</p>
+    </div>
+
+    <!-- One-time reveal (populated on create) -->
+    <section id="reveal" class="reveal rise" hidden aria-labelledby="reveal-title"></section>
+
+    <div class="grid">
+      <!-- Create -->
+      <section class="card rise d2" aria-labelledby="create-h">
+        <div class="card-head">
+          <div>
+            <h2 id="create-h">Create a key</h2>
+            <p class="hint">Select the repositories this key may read.</p>
+          </div>
+          <button id="reload-repos" class="btn btn-ghost btn-sm" type="button">Reload</button>
+        </div>
+        <div class="repo-tools">
+          <input id="repo-filter" class="input" type="search" placeholder="Filter repositories" aria-label="Filter repositories" autocomplete="off" hidden>
+          <button id="select-all" class="linkbtn" type="button" hidden>Select all</button>
+          <button id="clear-all" class="linkbtn" type="button" hidden>Clear</button>
+        </div>
+        <fieldset class="repo-scroll" id="repo-fieldset" aria-label="Repositories">
+          <div id="repos-status" class="status-inline" role="status" aria-live="polite"></div>
+        </fieldset>
+        <div class="card-foot">
+          <span id="sel-count" class="sel-count">No repositories selected</span>
+          <button id="generate" class="btn btn-primary" type="button" disabled>Generate key</button>
+        </div>
+      </section>
+
+      <!-- Existing -->
+      <section class="card rise d3" aria-labelledby="keys-h">
+        <div class="card-head">
+          <div>
+            <h2 id="keys-h">Existing keys</h2>
+            <p class="hint">Keys you have created for this account.</p>
+          </div>
+          <button id="refresh" class="btn btn-ghost btn-sm" type="button">Refresh</button>
+        </div>
+        <ul id="keys-list" class="keys-list" aria-live="polite"></ul>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN_KEY = "__fo_token__";
+  var USER_KEY = "__fo_user__";
+
+  // ── Tiny DOM helpers ─────────────────────────────────────────────────────
+  function $(sel, root) { return (root || document).querySelector(sel); }
+
+  function el(tag, attrs) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v == null || v === false) return;
+        if (k === "class") node.className = v;
+        else if (k === "text") node.textContent = v;
+        else if (k.slice(0, 2) === "on") node.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v === true) node.setAttribute(k, "");
+        else node.setAttribute(k, String(v));
+      });
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var kid = arguments[i];
+      if (kid == null || kid === false) continue;
+      node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    }
+    return node;
+  }
+
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function svg(pathD, size) {
+    var ns = "http://www.w3.org/2000/svg";
+    var s = document.createElementNS(ns, "svg");
+    s.setAttribute("viewBox", "0 0 16 16");
+    s.setAttribute("width", size || 16);
+    s.setAttribute("height", size || 16);
+    s.setAttribute("fill", "currentColor");
+    s.setAttribute("aria-hidden", "true");
+    var p = document.createElementNS(ns, "path");
+    p.setAttribute("d", pathD);
+    s.appendChild(p);
+    return s;
+  }
+  var ICON_LOCK = "M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Zm1.5 0h4V5a2 2 0 1 0-4 0Z";
+  var ICON_WARN = "M8.9 1.8a1 1 0 0 0-1.8 0L1.2 12.6A1 1 0 0 0 2.1 14h11.8a1 1 0 0 0 .9-1.4L8.9 1.8ZM7.25 6h1.5v4h-1.5V6Zm0 5.25h1.5v1.5h-1.5v-1.5Z";
+  var ICON_COPY = "M6 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H6Zm0 1.5h6a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5ZM3 4.5A1.5 1.5 0 0 0 1.5 6v6A2.5 2.5 0 0 0 4 14.5h5A1.5 1.5 0 0 0 10.5 13H4a1 1 0 0 1-1-1V4.5Z";
+
+  // ── Storage ──────────────────────────────────────────────────────────────
+  function getToken() {
+    try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+  }
+  function getUser() {
+    try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (e) { return null; }
+  }
+
+  // ── State ────────────────────────────────────────────────────────────────
+  var state = {
+    token: getToken(),
+    user: getUser(),
+    repos: [],
+    reposLoaded: false,
+    reposError: null,
+    keys: [],
+    keysLoaded: false,
+    keysError: null
+  };
+  var selected = Object.create(null); // full_name -> true
+
+  // ── Elements ─────────────────────────────────────────────────────────────
+  var gate = $("#gate");
+  var app = $("#app");
+  var avatarEl = $("#avatar");
+  var loginEl = $("#login");
+  var repoFieldset = $("#repo-fieldset");
+  var reposStatus = $("#repos-status");
+  var repoFilter = $("#repo-filter");
+  var selectAllBtn = $("#select-all");
+  var clearAllBtn = $("#clear-all");
+  var selCount = $("#sel-count");
+  var generateBtn = $("#generate");
+  var keysList = $("#keys-list");
+  var revealEl = $("#reveal");
+  var toastEl = $("#toast");
+
+  var toastTimer = null;
+  function toast(message, kind) {
+    toastEl.textContent = message;
+    toastEl.className = "toast show" + (kind === "error" ? " error" : "");
+    toastEl.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toastEl.className = "toast" + (kind === "error" ? " error" : "");
+      toastEl.hidden = true;
+    }, 3800);
+  }
+
+  // ── API ──────────────────────────────────────────────────────────────────
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = { "Accept": "application/json" };
+    Object.keys(opts.headers || {}).forEach(function (k) { headers[k] = opts.headers[k]; });
+    if (opts.body) headers["Content-Type"] = "application/json";
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+
+    return fetch(path, {
+      method: opts.method || "GET",
+      headers: headers,
+      body: opts.body
+    }).then(function (res) {
+      if (res.status === 401) {
+        signOut();
+        throw new Error("Your session expired. Sign in again.");
+      }
+      if (!res.ok) {
+        return res.text().then(function (raw) {
+          var msg = res.statusText || ("HTTP " + res.status);
+          try {
+            var j = JSON.parse(raw);
+            if (j && j.message) msg = j.message;
+          } catch (e) { /* not json */ }
+          throw new Error(msg);
+        });
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    });
+  }
+
+  // ── Render: signed in / out ──────────────────────────────────────────────
+  function renderAuth() {
+    var signedIn = !!state.token;
+    gate.hidden = signedIn;
+    app.hidden = !signedIn;
+    if (!signedIn) return;
+
+    loginEl.textContent = (state.user && state.user.login) || "";
+    if (state.user && state.user.avatar) {
+      avatarEl.src = state.user.avatar;
+      avatarEl.alt = "";
+    } else {
+      avatarEl.removeAttribute("src");
+      avatarEl.alt = "";
+    }
+  }
+
+  function signIn() {
+    var w = 600, h = 700;
+    var left = Math.max(0, Math.round((screen.width - w) / 2));
+    var top = Math.max(0, Math.round((screen.height - h) / 2));
+    window.open(
+      "/auth/github?origin=" + encodeURIComponent(location.origin),
+      "fo_auth",
+      "width=" + w + ",height=" + h + ",left=" + left + ",top=" + top
+    );
+  }
+
+  function signOut() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } catch (e) { /* ignore */ }
+    state.token = null;
+    state.user = null;
+    state.repos = [];
+    state.keys = [];
+    state.reposLoaded = false;
+    state.keysLoaded = false;
+    state.reposError = null;
+    state.keysError = null;
+    selected = Object.create(null);
+    revealEl.hidden = true;
+    repoFilter.value = "";
+    renderAuth();
+  }
+
+  // ── Repositories: load + render ──────────────────────────────────────────
+  function setReposStatus(message, kind) {
+    clear(reposStatus);
+    reposStatus.className = "status-inline" + (kind ? " " + kind : "");
+    if (kind === "loading") {
+      reposStatus.append(el("span", { class: "spinner" }));
+    }
+    reposStatus.append(el("span", { text: message }));
+    if (kind === "empty") {
+      reposStatus.className = "status-inline empty";
+    } else if (kind === "error") {
+      reposStatus.className = "status-inline error";
+    }
+  }
+
+  function loadRepos() {
+    state.reposLoaded = false;
+    state.reposError = null;
+    setReposStatus("Loading repositories\u2026", "loading");
+    generateBtn.disabled = true;
+
+    api("/api/repos").then(function (repos) {
+      state.repos = Array.isArray(repos) ? repos : [];
+      state.reposLoaded = true;
+      state.reposError = null;
+    }).catch(function (err) {
+      state.repos = [];
+      state.reposLoaded = true;
+      state.reposError = err.message;
+    }).then(function () {
+      renderRepos();
+    });
+  }
+
+  function groupByOwner(repos) {
+    var groups = [];
+    var index = {};
+    repos.forEach(function (r) {
+      var full = r.full_name || "";
+      var slash = full.indexOf("/");
+      var owner = slash > -1 ? full.slice(0, slash) : "";
+      var name = slash > -1 ? full.slice(slash + 1) : full;
+      if (!index[owner]) {
+        index[owner] = { owner: owner, items: [] };
+        groups.push(index[owner]);
+      }
+      index[owner].items.push({ full_name: full, name: name, private: !!r.private });
+    });
+    return groups;
+  }
+
+  function renderRepos() {
+    clear(repoFieldset);
+
+    if (state.reposError) {
+      setReposStatus("Could not load repositories. " + state.reposError, "error");
+      repoFieldset.append(reposStatus);
+      updateSelectionUi();
+      return;
+    }
+
+    if (!state.repos.length) {
+      setReposStatus("No repositories found. Check that the GitHub App is installed for your account.", "empty");
+      repoFieldset.append(reposStatus);
+      updateSelectionUi();
+      return;
+    }
+
+    var filter = (repoFilter.value || "").trim().toLowerCase();
+    var matches = state.repos.filter(function (r) {
+      return (r.full_name || "").toLowerCase().indexOf(filter) > -1;
+    });
+
+    repoFilter.hidden = state.repos.length <= 6;
+    selectAllBtn.hidden = state.repos.length < 2;
+    clearAllBtn.hidden = false;
+
+    if (!matches.length) {
+      setReposStatus("No repositories match \u201c" + repoFilter.value.trim() + "\u201d.", "empty");
+      repoFieldset.append(reposStatus);
+      updateSelectionUi();
+      return;
+    }
+
+    groupByOwner(matches).forEach(function (group) {
+      var g = el("div", { class: "owner-group" });
+      g.append(el("div", { class: "owner-label", text: group.owner }));
+      group.items.forEach(function (r) {
+        var input = el("input", {
+          type: "checkbox",
+          value: r.full_name,
+          checked: !!selected[r.full_name],
+          onchange: function () {
+            if (input.checked) selected[r.full_name] = true;
+            else delete selected[r.full_name];
+            updateSelectionUi();
+          }
+        });
+        var nameEl = el("span", { class: "repo-name" });
+        if (r.full_name.indexOf("/") > -1) {
+          nameEl.append(el("span", { class: "owner", text: group.owner + "/" }));
+        }
+        nameEl.append(document.createTextNode(r.name));
+
+        var row = el(
+          "label",
+          { class: "repo" },
+          input,
+          nameEl,
+          el("span", { class: "repo-spacer" }),
+          r.private
+            ? el("span", { class: "badge badge-private" }, svg(ICON_LOCK, 11), "Private")
+            : el("span", { class: "badge" }, "Public")
+        );
+        g.append(row);
+      });
+      repoFieldset.append(g);
+    });
+
+    updateSelectionUi();
+  }
+
+  function selectedNames() { return Object.keys(selected); }
+
+  function updateSelectionUi() {
+    var names = selectedNames();
+    var n = names.length;
+    selCount.textContent = n === 0
+      ? "No repositories selected"
+      : n + (n === 1 ? " repository selected" : " repositories selected");
+    generateBtn.disabled = n === 0;
+    var anyRepos = state.reposLoaded && state.repos.length > 0;
+    if (!anyRepos) { selectAllBtn.hidden = true; clearAllBtn.hidden = true; }
+    clearAllBtn.disabled = n === 0;
+    var allSelected = anyRepos && state.repos.every(function (r) { return selected[r.full_name]; });
+    selectAllBtn.textContent = allSelected ? "Clear all" : "Select all";
+  }
+
+  // ── Keys: load + render ──────────────────────────────────────────────────
+  function fmtDate(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso || "";
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function keysStatusRow(message) {
+    var li = el("li", { class: "status-inline" });
+    li.append(el("span", { text: message }));
+    return li;
+  }
+
+  function loadKeys() {
+    state.keysLoaded = false;
+    state.keysError = null;
+    clear(keysList);
+    var loading = el("li", { class: "status-inline" }, el("span", { class: "spinner" }), el("span", { text: "Loading keys\u2026" }));
+    keysList.append(loading);
+
+    api("/api/keys").then(function (keys) {
+      state.keys = Array.isArray(keys) ? keys : [];
+      state.keysLoaded = true;
+    }).catch(function (err) {
+      state.keys = [];
+      state.keysLoaded = true;
+      state.keysError = err.message;
+    }).then(function () {
+      renderKeys();
+    });
+  }
+
+  function renderKeys() {
+    clear(keysList);
+
+    if (state.keysError) {
+      var err = el("li", { class: "status-inline error" }, el("span", { text: "Could not load keys. " + state.keysError }));
+      keysList.append(err);
+      return;
+    }
+    if (!state.keys.length) {
+      var empty = el("li", { class: "status-inline empty" });
+      empty.append(el("div", { text: "No keys yet." }));
+      empty.append(el("div", { style: "margin-top:4px;font-size:12.5px", text: "Generate one to let an agent read feedback." }));
+      keysList.append(empty);
+      return;
+    }
+
+    state.keys.forEach(function (key) {
+      var item = el("li", { class: "key-item" + (key.revoked ? " revoked" : "") });
+
+      var main = el("div", { class: "key-main" });
+      var chips = el("div", { class: "key-chips" });
+      (key.repos || []).forEach(function (r) {
+        chips.append(el("span", { class: "chip", text: r }));
+      });
+      main.append(chips);
+      main.append(el("div", { class: "key-meta", text: "Created " + fmtDate(key.created_at) + (key.revoked ? " \u00b7 revoked" : "") }));
+
+      var side = el("div", { class: "key-side" });
+      side.append(el("span", { class: "key-id", text: "#" + key.id }));
+
+      if (key.revoked) {
+        side.append(el("span", { class: "badge badge-revoked", text: "Revoked" }));
+      } else {
+        var revoke = el("button", {
+          class: "btn btn-danger btn-sm",
+          type: "button",
+          "aria-label": "Revoke key " + key.id,
+          onclick: function () { revokeKey(key.id, revoke); }
+        }, "Revoke");
+        side.append(revoke);
+      }
+
+      item.append(main, side);
+      keysList.append(item);
+    });
+  }
+
+  function revokeKey(id, btn) {
+    if (!window.confirm("Revoke this key? Any agent using it will lose access immediately.")) return;
+    btn.disabled = true;
+    btn.textContent = "Revoking\u2026";
+    api("/api/keys/" + id, { method: "DELETE" }).then(function () {
+      toast("Key revoked.");
+      loadKeys();
+    }).catch(function (err) {
+      toast("Could not revoke key: " + err.message, "error");
+      btn.disabled = false;
+      btn.textContent = "Revoke";
+    });
+  }
+
+  // ── Create key + one-time reveal ─────────────────────────────────────────
+  function copyText(text, btn) {
+    function done() {
+      var prev = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(function () { btn.textContent = prev; }, 1600);
+    }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) done();
+      else toast("Copy failed. Select the key and copy it manually.", "error");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function showReveal(plainKey, repos) {
+    clear(revealEl);
+    revealEl.hidden = false;
+
+    var head = el("div", { class: "reveal-head" }, el("span", { class: "dot", "aria-hidden": "true" }),
+      el("span", { id: "reveal-title", text: "Key created" }));
+    var close = el("button", {
+      class: "btn btn-ghost btn-sm reveal-close",
+      type: "button",
+      "aria-label": "Dismiss key",
+      onclick: function () { revealEl.hidden = true; clear(revealEl); }
+    }, "Dismiss");
+    head.append(close);
+
+    var note = el("p", { class: "note", text: "Copy it now \u2014 this is the only time the full key is shown." });
+
+    var copyBtn = el("button", {
+      class: "btn",
+      type: "button",
+      "aria-label": "Copy API key to clipboard",
+      onclick: function () { copyText(plainKey, copyBtn); }
+    }, svg(ICON_COPY, 15), "Copy");
+    var row = el("div", { class: "key-code-row" }, el("code", { class: "key-code", text: plainKey }), copyBtn);
+
+    var warn = el("div", { class: "warn" }, svg(ICON_WARN, 15),
+      el("span", { text: "Store it in a secret manager. It cannot be retrieved again \u2014 revoke and create a new one if lost." }));
+
+    revealEl.append(head, note);
+    if (repos && repos.length) {
+      var chips = el("div", { class: "key-chips", style: "margin-top:12px" });
+      repos.forEach(function (r) { chips.append(el("span", { class: "chip", text: r })); });
+      revealEl.append(chips);
+    }
+    revealEl.append(row, warn);
+
+    if (revealEl.scrollIntoView) revealEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    copyBtn.focus();
+  }
+
+  function generate() {
+    var repos = selectedNames();
+    if (!repos.length) return;
+    var prevLabel = generateBtn.textContent;
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generating\u2026";
+
+    api("/api/keys", { method: "POST", body: JSON.stringify({ repos: repos }) })
+      .then(function (res) {
+        showReveal(res.key, res.repos || repos);
+        toast("Key created. Copy it now \u2014 it is shown once.");
+        selected = Object.create(null);
+        renderRepos();
+        loadKeys();
+      })
+      .catch(function (err) {
+        toast("Could not create key: " + err.message, "error");
+      })
+      .then(function () {
+        generateBtn.textContent = prevLabel;
+        updateSelectionUi();
+      });
+  }
+
+  // ── Bootstrap ────────────────────────────────────────────────────────────
+  function bootstrap() {
+    renderAuth();
+    if (!state.token) return;
+
+    api("/me").then(function (me) {
+      state.user = { login: me.login, avatar: me.avatar_url };
+      try { localStorage.setItem(USER_KEY, JSON.stringify(state.user)); } catch (e) { /* ignore */ }
+      renderAuth();
+      loadRepos();
+      loadKeys();
+    }).catch(function () {
+      // 401 already handled by signOut(); anything else keeps cached identity.
+    });
+  }
+
+  // ── Events ───────────────────────────────────────────────────────────────
+  $("#signin").addEventListener("click", signIn);
+  $("#signout").addEventListener("click", function () { signOut(); toast("Signed out."); });
+  $("#refresh").addEventListener("click", loadKeys);
+  $("#reload-repos").addEventListener("click", loadRepos);
+  generateBtn.addEventListener("click", generate);
+  repoFilter.addEventListener("input", renderRepos);
+
+  selectAllBtn.addEventListener("click", function () {
+    var filter = (repoFilter.value || "").trim().toLowerCase();
+    var visible = state.repos.filter(function (r) {
+      return (r.full_name || "").toLowerCase().indexOf(filter) > -1;
+    });
+    var allSelected = visible.length > 0 && visible.every(function (r) { return selected[r.full_name]; });
+    visible.forEach(function (r) {
+      if (allSelected) delete selected[r.full_name];
+      else selected[r.full_name] = true;
+    });
+    renderRepos();
+  });
+
+  clearAllBtn.addEventListener("click", function () {
+    selected = Object.create(null);
+    renderRepos();
+  });
+
+  window.addEventListener("message", function (event) {
+    if (event.origin !== location.origin) return;
+    var data = event.data;
+    if (!data || data.type !== "feedback_overlay_auth" || !data.token) return;
+    try {
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify({ login: data.login || "", avatar: data.avatar || "" }));
+    } catch (e) { /* ignore */ }
+    state.token = data.token;
+    state.user = { login: data.login || "", avatar: data.avatar || "" };
+    state.reposLoaded = false;
+    state.keysLoaded = false;
+    selected = Object.create(null);
+    toast("Signed in as " + (data.login || "GitHub user") + ".");
+    bootstrap();
+  });
+
+  bootstrap();
+})();
+</script>
+</body>
+</html>

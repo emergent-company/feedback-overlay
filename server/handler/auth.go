@@ -95,6 +95,14 @@ func (h *Handler) HandleGitHubCallback(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch GitHub user")
 	}
 
+	// Persist the user's GitHub token (encrypted) so /api/repos can list
+	// their repositories later.
+	if enc, err := encryptToken(userToken, h.JWTSecret); err == nil {
+		if err := h.Store.UpsertUserToken(c.Request().Context(), user.Login, enc); err != nil {
+			c.Logger().Errorf("store user token: %v", err)
+		}
+	}
+
 	// The JWT only carries identity — no GitHub token stored in it.
 	// Issue creation uses a server-side installation token instead.
 	jwtToken, err := middleware.IssueToken(h.JWTSecret, user.Login, user.AvatarURL)

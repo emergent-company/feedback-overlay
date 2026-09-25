@@ -15,7 +15,10 @@ import (
 	"github.com/emergent-company/feedback-overlay/server/github"
 	"github.com/emergent-company/feedback-overlay/server/handler"
 	authmw "github.com/emergent-company/feedback-overlay/server/middleware"
+	"github.com/emergent-company/feedback-overlay/server/panel"
 	"github.com/emergent-company/feedback-overlay/server/store"
+	"github.com/emergent-company/go-daisy/render"
+	"github.com/emergent-company/go-daisy/staticfs"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -24,7 +27,6 @@ import (
 )
 
 //go:embed static/feedback-overlay.js
-//go:embed static/panel.html
 var staticFiles embed.FS
 
 // Version and Commit are injected at build time via -ldflags.
@@ -120,14 +122,17 @@ func main() {
 	staticFS, _ := fs.Sub(staticFiles, "static")
 	e.GET("/feedback-overlay.js", echo.WrapHandler(http.FileServer(http.FS(staticFS))))
 
-	// ── Static: serve the user panel ──────────────────────────────────────────
-	panelHTML, _ := staticFiles.ReadFile("static/panel.html")
-	e.GET("/panel", func(c echo.Context) error {
-		return c.Blob(http.StatusOK, "text/html; charset=utf-8", panelHTML)
-	})
+	// ── go-daisy static assets (CSS/JS) ───────────────────────────────────────
+	e.GET("/static/*", echo.WrapHandler(http.StripPrefix("/static/", staticfs.Handler("/"))))
 
 	// ── Routes ────────────────────────────────────────────────────────────────
 	h := handler.New(s, ghCfg, jwtSecret)
+
+	// Panel (public; go-daisy Templ page)
+	e.GET("/panel", func(c echo.Context) error {
+		render.RenderPage(c.Response().Writer, c.Request(), panel.PanelPage())
+		return nil
+	})
 
 	// Auth (public)
 	e.GET("/auth/github", h.HandleGitHubLogin)

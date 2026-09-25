@@ -36,8 +36,18 @@ tasks:
 
   # ── Server ──────────────────────────────────────────────────────────────────
 
+  generate:templ:
+    desc: "Generate Templ Go code from .templ files"
+    cmds:
+      - /root/go/bin/templ generate
+    sources:
+      - server/**/*.templ
+    generates:
+      - server/**/*_templ.go
+
   build:server:
     desc: "Build the Go server binary"
+    deps: [generate:templ]
     cmds:
       - |
         CGO_ENABLED=0 go build \
@@ -64,7 +74,7 @@ tasks:
 
   dev:
     desc: "Run the server locally (requires env vars to be set)"
-    deps: [build:client:dev]
+    deps: [build:client:dev, generate:templ]
     cmds:
       - go run ./server
 

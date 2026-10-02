@@ -1,10 +1,13 @@
-package main
+package app
 
 import (
 	"context"
 	"crypto/subtle"
 	"io/fs"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/emergent-company/emergent.feedback/server/github"
@@ -22,8 +25,29 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// buildRouter assembles the Echo router with all middleware and routes.
-func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrigins, mcpAPIKey string) *echo.Echo {
+// Version and Commit are injected at build time via -ldflags.
+var (
+	Version = "dev"
+	Commit  = "unknown"
+)
+
+// Options configures BuildRouter.
+type Options struct {
+	Store          *store.Store
+	GitHub         *github.AppConfig
+	JWTSecret      string
+	AllowedOrigins string
+	MCPAPIKey      string
+	// StaticFS is the directory containing the embedded client bundle
+	// (the "static" subtree), served at /emergent-feedback.js.
+	StaticFS fs.FS
+	// Extend is an optional hook that lets an edition mount extra routes or
+	// middleware. It runs after all core routes are registered.
+	Extend func(e *echo.Echo, s *store.Store) error
+}
+
+// BuildRouter assembles the Echo router with all middleware and routes.
+func BuildRouter(opts Options) (*echo.Echo, error) {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
@@ -47,7 +71,7 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 			if origin == "" {
 				return next(c)
 			}
-			if !originAllowed(origin, allowedOrigins) {
+			if !originAllowed(origin, opts.AllowedOrigins) {
 				return next(c)
 			}
 			h := c.Response().Header()
@@ -64,14 +88,14 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 	})
 
 	// ── Static: serve embedded emergent-feedback.js ────────────────────────────
-	staticFS, _ := fs.Sub(staticFiles, "static")
+	staticFS := opts.StaticFS
 	e.GET("/emergent-feedback.js", echo.WrapHandler(http.FileServer(http.FS(staticFS))))
 
 	// ── go-daisy static assets (CSS/JS) ───────────────────────────────────────
 	e.GET("/static/*", echo.WrapHandler(staticfs.Handler("/static/")))
 
 	// ── Routes ────────────────────────────────────────────────────────────────
-	h := handler.New(s, ghCfg, jwtSecret)
+	h := handler.New(opts.Store, opts.GitHub, opts.JWTSecret)
 
 	// Panel (public; go-daisy Templ page)
 	e.GET("/panel", func(c echo.Context) error {
@@ -103,7 +127,7 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 	e.GET("/issues", h.HandleListIssues)
 
 	// Authenticated routes
-	auth := e.Group("", authmw.RequireAuth(jwtSecret))
+	auth := e.Group("", authmw.RequireAuth(opts.JWTSecret))
 	auth.GET("/me", h.HandleMe)
 	auth.GET("/feedback/list", h.HandleListFeedbackByURL)
 	auth.GET("/feedback/:id", h.HandleGetFeedback)
@@ -136,7 +160,7 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 		},
 	)
 	verify := func(ctx context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
-		if mcpAPIKey != "" && subtle.ConstantTimeCompare([]byte(token), []byte(mcpAPIKey)) == 1 {
+		if opts.MCPAPIKey != "" && subtle.ConstantTimeCompare([]byte(token), []byte(opts.MCPAPIKey)) == 1 {
 			return &mcpauth.TokenInfo{Scopes: []string{"*"}, Expiration: time.Now().Add(time.Hour)}, nil
 		}
 		repos, err := h.VerifyAPIKey(ctx, token)
@@ -148,5 +172,43 @@ func buildRouter(s *store.Store, ghCfg *github.AppConfig, jwtSecret, allowedOrig
 	authed := mcpauth.RequireBearerToken(verify, nil)(streamable)
 	e.Any("/mcp", echo.WrapHandler(authed))
 
-	return e
+	if opts.Extend != nil {
+		if err := opts.Extend(e, opts.Store); err != nil {
+			return nil, err
+		}
+	}
+	return e, nil
+}
+
+// originAllowed reports whether the request Origin matches the ALLOWED_ORIGINS
+// allowlist. "*" (or an empty list) allows any origin.
+func originAllowed(origin, allowlist string) bool {
+	for _, allowed := range strings.Split(allowlist, ",") {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "*" {
+			return true
+		}
+		if allowed == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// envFloatOr reads a float environment variable, falling back to def when the
+// variable is empty or not parseable as a float.
+func envFloatOr(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return def
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }

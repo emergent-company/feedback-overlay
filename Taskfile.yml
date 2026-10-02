@@ -20,7 +20,7 @@ tasks:
       - styles/**/*.css
       - package.json
     generates:
-      - ../server/static/emergent-feedback.js
+      - ../server/app/static/emergent-feedback.js
 
   build:client:dev:
     desc: "Build the JS client bundle (development, with source maps)"
@@ -56,7 +56,7 @@ tasks:
           ./server
     sources:
       - server/**/*.go
-      - server/static/emergent-feedback.js
+      - server/app/static/emergent-feedback.js
       - go.mod
       - go.sum
     generates:

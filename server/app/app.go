@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"crypto/subtle"
+	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -31,6 +33,17 @@ var (
 	Commit  = "unknown"
 )
 
+//go:embed static/emergent-feedback.js
+var staticFiles embed.FS
+
+func embeddedStaticFS() fs.FS {
+	sub, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		panic(fmt.Sprintf("app: embedded static fs: %v", err))
+	}
+	return sub
+}
+
 // Options configures BuildRouter.
 type Options struct {
 	Store          *store.Store
@@ -38,8 +51,9 @@ type Options struct {
 	JWTSecret      string
 	AllowedOrigins string
 	MCPAPIKey      string
-	// StaticFS is the directory containing the embedded client bundle
-	// (the "static" subtree), served at /emergent-feedback.js.
+	Port           string
+	// StaticFS is optional; when nil, BuildRouter serves the embedded client
+	// bundle (the "static" subtree) at /emergent-feedback.js.
 	StaticFS fs.FS
 	// Extend is an optional hook that lets an edition mount extra routes or
 	// middleware. It runs after all core routes are registered.
@@ -89,6 +103,9 @@ func BuildRouter(opts Options) (*echo.Echo, error) {
 
 	// ── Static: serve embedded emergent-feedback.js ────────────────────────────
 	staticFS := opts.StaticFS
+	if staticFS == nil {
+		staticFS = embeddedStaticFS()
+	}
 	e.GET("/emergent-feedback.js", echo.WrapHandler(http.FileServer(http.FS(staticFS))))
 
 	// ── go-daisy static assets (CSS/JS) ───────────────────────────────────────
@@ -211,4 +228,80 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func requiredEnv(key string) (string, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return "", fmt.Errorf("%s is required", key)
+	}
+	return v, nil
+}
+
+// OptionsFromEnv builds Options from environment variables and opens the store.
+// The returned cleanup closes the store and must be called by the caller.
+func OptionsFromEnv() (Options, func(), error) {
+	jwtSecret, err := requiredEnv("JWT_SECRET")
+	if err != nil {
+		return Options{}, nil, err
+	}
+	clientID, err := requiredEnv("GH_APP_CLIENT_ID")
+	if err != nil {
+		return Options{}, nil, err
+	}
+	clientSecret, err := requiredEnv("GH_APP_CLIENT_SECRET")
+	if err != nil {
+		return Options{}, nil, err
+	}
+	redirectURI, err := requiredEnv("GH_REDIRECT_URI")
+	if err != nil {
+		return Options{}, nil, err
+	}
+
+	appID := envOr("GH_APP_ID", "")
+	installID := envOr("GH_INSTALLATION_ID", "")
+	botToken := envOr("GH_BOT_TOKEN", "")
+	authorMode := envOr("ISSUE_AUTHOR_MODE", "bot")
+
+	var privateKey string
+	if keyPath := os.Getenv("GH_APP_PRIVATE_KEY_PATH"); keyPath != "" {
+		data, rerr := os.ReadFile(keyPath)
+		if rerr != nil {
+			return Options{}, nil, fmt.Errorf("read GH_APP_PRIVATE_KEY_PATH: %w", rerr)
+		}
+		privateKey = string(data)
+	} else {
+		privateKey = os.Getenv("GH_APP_PRIVATE_KEY")
+	}
+
+	switch authorMode {
+	case "", "bot":
+		authorMode = "bot"
+	case "user":
+	default:
+		return Options{}, nil, fmt.Errorf("ISSUE_AUTHOR_MODE must be one of \"bot\" or \"user\" (got %q)", authorMode)
+	}
+	if authorMode == "bot" && botToken == "" && (appID == "" || privateKey == "" || installID == "") {
+		fmt.Fprintln(os.Stderr, "warning: no GitHub App or GH_BOT_TOKEN configured; issues will be authored by each reporter's own GitHub token")
+	}
+
+	var s *store.Store
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		s, err = store.OpenPostgres(dsn)
+	} else {
+		s, err = store.OpenSQLite(envOr("DB_PATH", "/data/feedback-overlay.db"))
+	}
+	if err != nil {
+		return Options{}, nil, err
+	}
+	cleanup := func() { _ = s.Close() }
+
+	return Options{
+		Store:          s,
+		GitHub:         &github.AppConfig{AppID: appID, ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI, PrivateKeyPEM: privateKey, InstallationID: installID, BotToken: botToken, AuthorMode: authorMode},
+		JWTSecret:      jwtSecret,
+		AllowedOrigins: envOr("ALLOWED_ORIGINS", "*"),
+		MCPAPIKey:      os.Getenv("MCP_API_KEY"),
+		Port:           envOr("PORT", "8080"),
+	}, cleanup, nil
 }

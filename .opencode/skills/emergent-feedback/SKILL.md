@@ -121,6 +121,8 @@ docker compose up -d
 | `GITHUB_CLIENT_SECRET` | — | OAuth client secret |
 | `GITHUB_REDIRECT_URI` | — | Must match OAuth callback |
 | `JWT_SECRET` | — | Session JWT signing key |
+| `ISSUE_AUTHOR_MODE` | `bot` | Issue author: `bot` (GitHub App or `GH_BOT_TOKEN`) or `user` (reporter's own token) |
+| `GH_BOT_TOKEN` | — | Optional fine-grained PAT to author issues when no GitHub App is configured |
 
 ## GitHub labels
 

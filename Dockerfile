@@ -44,10 +44,10 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     go mod download
 
-# Copy source. The JS bundle in server/static/ is a placeholder in the repo;
+# Copy source. The JS bundle in server/app/static/ is a placeholder in the repo;
 # we overwrite it from the node-builder stage below.
 COPY . .
-COPY --from=node-builder /client/../server/static/emergent-feedback.js ./server/static/emergent-feedback.js
+COPY --from=node-builder /client/../server/app/static/emergent-feedback.js ./server/app/static/emergent-feedback.js
 
 # VERSION/COMMIT are injected here. Changing them only busts the final link
 # step, not the expensive compilation of all dependencies.

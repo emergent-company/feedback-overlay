@@ -62,14 +62,14 @@ func (s *Store) Create(ctx context.Context, p CreateParams) (Feedback, error) {
 	if label == "" {
 		label = "feedback"
 	}
-	const q = `
+	q := `
 INSERT INTO feedback (url, selector, comment, context_json, screenshot, github_user, repo, label, snapshot, snapshot_size)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id, created_at`
 
 	var f Feedback
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, q,
+	err := s.db.QueryRowContext(ctx, s.bind(q),
 		p.URL, p.Selector, p.Comment, p.ContextJSON, p.Screenshot, p.GitHubUser, p.Repo, label, p.Snapshot, len(p.Snapshot),
 	).Scan(&f.ID, &createdAt)
 	if err != nil {
@@ -92,14 +92,14 @@ RETURNING id, created_at`
 
 // Get returns a single feedback item by ID.
 func (s *Store) Get(ctx context.Context, id int64) (Feedback, error) {
-	const q = `
+	q := `
 SELECT id, url, selector, comment, context_json, screenshot, github_user, repo, label, status, COALESCE(issue_url,''), created_at,
        COALESCE(snapshot_size,0), snapshot
 FROM feedback WHERE id = ?`
 
 	var f Feedback
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, q, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.bind(q), id).Scan(
 		&f.ID, &f.URL, &f.Selector, &f.Comment, &f.ContextJSON,
 		&f.Screenshot, &f.GitHubUser, &f.Repo, &f.Label, &f.Status, &f.IssueURL, &createdAt,
 		&f.SnapshotSize, &f.Snapshot,
@@ -116,12 +116,12 @@ FROM feedback WHERE id = ?`
 
 // ListByURL returns all open feedback items for a given page URL, newest first.
 func (s *Store) ListByURL(ctx context.Context, url string) ([]Feedback, error) {
-	const q = `
+	q := `
 SELECT id, url, selector, comment, context_json, COALESCE(length(screenshot), 0), github_user, repo, label, status, COALESCE(issue_url,''), created_at
 FROM feedback WHERE url = ? AND status = 'open'
 ORDER BY created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, q, url)
+	rows, err := s.db.QueryContext(ctx, s.bind(q), url)
 	if err != nil {
 		return nil, fmt.Errorf("store: list by url: %w", err)
 	}
@@ -146,13 +146,13 @@ ORDER BY created_at DESC`
 
 // ListByURLSummary returns per-selector badge counts for a given page URL.
 func (s *Store) ListByURLSummary(ctx context.Context, url string) ([]URLSummary, error) {
-	const q = `
-SELECT selector, COUNT(*) as cnt, GROUP_CONCAT(id) as ids
+	q := `
+SELECT selector, COUNT(*) as cnt, ` + s.d.groupConcat("id") + ` as ids
 FROM feedback WHERE url = ? AND status = 'open'
 GROUP BY selector
 ORDER BY selector`
 
-	rows, err := s.db.QueryContext(ctx, q, url)
+	rows, err := s.db.QueryContext(ctx, s.bind(q), url)
 	if err != nil {
 		return nil, fmt.Errorf("store: summary by url: %w", err)
 	}
@@ -195,7 +195,7 @@ SELECT id, url, selector, comment, repo, label, status, COALESCE(issue_url,''), 
 FROM feedback
 WHERE issue_url != '' AND repo IN (%s)
 ORDER BY id DESC LIMIT 500`, ph)
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, s.bind(q), args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: list exported: %w", err)
 	}
@@ -217,8 +217,8 @@ ORDER BY id DESC LIMIT 500`, ph)
 // Delete removes a feedback item by ID. Returns an error if the item doesn't
 // belong to the given githubUser.
 func (s *Store) Delete(ctx context.Context, id int64, githubUser string) error {
-	const q = `DELETE FROM feedback WHERE id = ? AND github_user = ?`
-	res, err := s.db.ExecContext(ctx, q, id, githubUser)
+	q := `DELETE FROM feedback WHERE id = ? AND github_user = ?`
+	res, err := s.db.ExecContext(ctx, s.bind(q), id, githubUser)
 	if err != nil {
 		return fmt.Errorf("store: delete feedback: %w", err)
 	}
@@ -239,9 +239,9 @@ func (s *Store) MarkExported(ctx context.Context, ids []int64, issueURL string) 
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
-	const q = `UPDATE feedback SET issue_url = ?, status = ? WHERE id = ?`
+	q := `UPDATE feedback SET issue_url = ?, status = ? WHERE id = ?`
 	for _, id := range ids {
-		if _, err := tx.ExecContext(ctx, q, issueURL, StatusResolved, id); err != nil {
+		if _, err := tx.ExecContext(ctx, s.bind(q), issueURL, StatusResolved, id); err != nil {
 			return fmt.Errorf("store: mark exported %d: %w", id, err)
 		}
 	}
